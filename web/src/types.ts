@@ -1,10 +1,12 @@
+export type ItemType = "version" | "sprint" | "epic" | "feature";
 export type StatusCategory = "todo" | "inprogress" | "done";
 
 export interface RoadmapItem {
   id: string;
-  key: string;
+  key: string | null;
   title: string;
-  type: "epic" | "feature";
+  description: string | null;
+  type: ItemType;
   status: string;
   statusCategory: StatusCategory;
   start: string | null;

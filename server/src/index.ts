@@ -2,7 +2,7 @@ import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
-import { configFromEnv, fetchEpics } from "./jira.js";
+import { configFromEnv, fetchRoadmap } from "./jira.js";
 import { sampleItems } from "./sample.js";
 import type { RoadmapResponse } from "./model.js";
 
@@ -20,7 +20,7 @@ app.get("/api/roadmap", async (req, res) => {
   try {
     let body: RoadmapResponse;
     if (jira) {
-      const { items, warnings } = await fetchEpics(jira);
+      const { items, warnings } = await fetchRoadmap(jira);
       body = { source: "jira", fetchedAt: new Date().toISOString(), items, warnings };
     } else {
       body = {

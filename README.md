@@ -1,10 +1,21 @@
 # Product Roadmap
 
-A free roadmap tool for product managers. It pulls Epics from Jira (Start date and Due date) and draws them as bars on a timeline.
+A free roadmap tool for product managers. It pulls your project's timeline from Jira and draws it on a Gantt-style roadmap.
 
-Stage 1 (this version): Epics as bars, read-only.
-Stage 2: Epics become swimlanes and their child Features become bars (the connector already has `fetchFeatures`).
-Later: Azure DevOps connector, saved views, mobile app.
+## What it shows
+
+Use **Display options** to choose one or more of these. For each one you can also switch names/descriptions and key dates on or off. Your choices are saved in the browser.
+
+| Layer | Jira source | Dates used |
+| --- | --- | --- |
+| Release versions | Project Releases (versions) | Start date and Release date. A version with only a release date is drawn as a diamond. |
+| Sprints | Scrum board sprints | Sprint start and end |
+| Epics | Epic issues | Start date and Due date |
+| Features and stories | Non-Epic, non-subtask issues | Start date and Due date |
+
+With Epics and Features both on, each Feature sits under its Epic. Anything missing a date is listed under "Not scheduled yet" instead of being hidden.
+
+Read-only for now. Next: Azure DevOps connector, then the mobile app.
 
 ## Run it
 
@@ -30,12 +41,17 @@ The "Start date" field id differs between Jira projects. The server finds it by 
 ## Test
 
 ```bash
-npm test           # Jira connector tests (mocked API)
+npm test           # connector tests (mocked Jira) and roadmap layout tests
 npm run typecheck
 ```
 
 ## Layout
 
-- `server/src/jira.ts`: Jira connector (field discovery, JQL search, normalising to `RoadmapItem`)
+- `server/src/jira.ts`: Jira connector (versions, sprints, Epics, features; field discovery; normalising to `RoadmapItem`)
 - `server/src/model.ts`: tool-agnostic item shape (Azure DevOps will map into the same shape)
+- `web/src/config.ts`: display options and how they are saved
+- `web/src/rows.ts`: decides which rows appear and how Features nest under Epics
 - `web/src/Gantt.tsx`: timeline view
+- `web/src/DisplayPanel.tsx`: the display options panel
+
+If one kind of item can't be loaded (for example a project with no Scrum board has no sprints), the rest still shows and a note explains what's missing.
