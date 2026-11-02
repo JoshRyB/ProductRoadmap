@@ -1,13 +1,14 @@
 import { DisplayPanel } from "./DisplayPanel";
 import { UserMenu } from "./UserMenu";
 import type { DisplayConfig } from "./config";
-import type { BoardType, ItemType, Me } from "./types";
+import { SOURCE_NAME } from "./source";
+import type { BoardType, ItemType, Me, Source } from "./types";
 
 interface Props {
   config: DisplayConfig;
   counts: Record<ItemType, number>;
   me: Me | null;
-  source: "jira" | "sample" | null;
+  source: Source | null;
   boardType: BoardType;
   estimate: boolean;
   onChange: (next: DisplayConfig) => void;
@@ -52,7 +53,7 @@ export function SettingsPage({ config, counts, me, source, boardType, estimate, 
           <dt>Email</dt>
           <dd>{me?.email ?? "Not available"}</dd>
           <dt>Data source</dt>
-          <dd>{source === "jira" ? "Jira (read-only)" : "Sample data"}</dd>
+          <dd>{source && source !== "sample" ? `${SOURCE_NAME[source]} (read-only)` : "Sample data"}</dd>
           <dt>Board type</dt>
           <dd>{BOARD_TEXT[boardType]}</dd>
         </dl>

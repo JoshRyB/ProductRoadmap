@@ -1,6 +1,23 @@
 # Product Roadmap
 
-A free roadmap tool for product managers. It pulls your project's timeline from Jira and draws it on a Gantt-style roadmap.
+A free roadmap tool for product managers. It pulls your project's timeline from **Jira** or **Azure DevOps** and draws it on a Gantt-style roadmap.
+
+## Connect Azure DevOps
+
+1. In Azure DevOps, open **User settings > Personal access tokens** and create a token with two read-only scopes: **Work Items: Read** and **Project and Team: Read**.
+2. In `server/.env` fill in `ADO_ORG_URL` (for example `https://dev.azure.com/your-organisation`), `ADO_PROJECT` and `ADO_PAT`. Leave the Jira settings empty. If both tools are filled in, Jira is used unless you set `PROVIDER=ado`.
+3. Restart `npm run dev`. The badge changes to "Live from Azure DevOps".
+
+How Azure DevOps maps onto the roadmap:
+
+| Roadmap | Azure DevOps | Dates used |
+| --- | --- | --- |
+| Epics | Work items of type Epic (`ADO_EPIC_TYPES`) | Start Date and Target Date |
+| Features and stories | Work items of type Feature (`ADO_FEATURE_TYPES`), under their Epic | Start Date and Target Date |
+| Sprints | The team's iterations (`ADO_TEAM`, or the project's default team) | Iteration start and finish |
+| Release versions | A folder of sprints (for example *Release 1* containing *Sprint 1* to *Sprint 4*), spanning its sprints. Azure DevOps has no planned-release object, so set `ADO_RELEASES=none` if your iteration folders mean something else (for example years). | Earliest start to latest finish |
+
+If the project has no dated iterations it's treated as Kanban, with the same behaviour described below. On the **Basic** process there is no Feature type, so set `ADO_FEATURE_TYPES=Issue`. The token stays on the server and never reaches the browser. Work items are shown as `ADO-<id>`.
 
 ## What it shows
 
@@ -21,7 +38,7 @@ To see the Kanban view on sample data, run the server with `SAMPLE_BOARD=kanban`
 
 With Epics and Features both on, each Feature sits under its Epic. Use the arrow next to an Epic to collapse it to just the Epic bar (a badge shows how many Features are hidden), or the arrow on the section header to collapse or expand them all. Anything missing a date is listed under "Not scheduled yet" instead of being hidden.
 
-The name in the top right is the Jira account the API token belongs to ("Sample user" when running on sample data). There is no separate sign-in yet.
+The name in the top right is the Jira account the API token belongs to ("Sample user" when running on sample data). With Azure DevOps it is the account that owns the token. There is no separate sign-in yet.
 
 ## Keeping the roadmap honest without maintaining it
 
@@ -37,7 +54,7 @@ These only use planned dates a person set. Estimated and rolled-up dates are nev
 - **Share**: download the current view as a **PNG** (for slides and documents), an **SVG** (vector), or a **PDF** (opens the print dialog; choose Save as PDF). Exports are drawn at a fixed size, so they always show the whole timeline however wide your window is, and include the title, view name, legend, anything not scheduled yet and how many things need attention.
 - **Copy link to this view**: a link that opens the same setup for anyone using the same copy of this app. It carries the setup, not the data, so it only works where the app is running and connected to your Jira.
 
-Read-only for now. Next: Azure DevOps connector, then the mobile app.
+Read-only for now. Next: one-click sign-in, then the mobile app.
 
 ## Run it
 
@@ -70,7 +87,9 @@ npm run typecheck
 ## Layout
 
 - `server/src/jira.ts`: Jira connector (versions, sprints, Epics, features; field discovery; normalising to `RoadmapItem`)
-- `server/src/model.ts`: tool-agnostic item shape (Azure DevOps will map into the same shape)
+- `server/src/ado.ts`: Azure DevOps connector (work items by query, iterations, iteration folders as releases)
+- `server/src/providers.ts`: picks Jira or Azure DevOps from `server/.env`
+- `server/src/model.ts`: tool-agnostic item shape that every connector maps into
 - `web/src/config.ts`: display options and how they are saved
 - `web/src/rows.ts`: decides which rows appear and how Features nest under Epics
 - `web/src/derive.ts`: estimated and rolled-up dates, progress and the needs-attention rules

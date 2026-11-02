@@ -1,4 +1,5 @@
-/** Tool-agnostic roadmap item. Jira and (later) Azure DevOps both normalise into this. */
+/** Tool-agnostic roadmap item. Jira and Azure DevOps both normalise into this. */
+export type Source = "jira" | "ado" | "sample";
 export type ItemType = "version" | "sprint" | "epic" | "feature";
 export type StatusCategory = "todo" | "inprogress" | "done";
 export type BoardType = "scrum" | "kanban" | "unknown";
@@ -29,14 +30,21 @@ export interface RoadmapItem {
   /** Epics and features only */
   activity: Activity | null;
   url: string | null;
-  source: "jira" | "sample";
+  source: Source;
 }
 
 export interface RoadmapResponse {
-  source: "jira" | "sample";
+  source: Source;
   /** Scrum boards have sprints; Kanban boards do not */
   boardType: BoardType;
   fetchedAt: string;
   items: RoadmapItem[];
   warnings: string[];
+}
+
+/** The account the connection belongs to, shown in the top right. */
+export interface Me {
+  name: string;
+  email: string | null;
+  source: Source;
 }

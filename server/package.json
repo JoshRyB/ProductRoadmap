@@ -8,7 +8,7 @@
     "start": "node --env-file-if-exists=.env dist/index.js",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx --test src/jira.test.ts"
+    "test": "tsx --test src/jira.test.ts src/ado.test.ts src/providers.test.ts"
   },
   "dependencies": { "express": "^4.21.2" },
   "devDependencies": {

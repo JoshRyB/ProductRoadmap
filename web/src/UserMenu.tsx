@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { SOURCE_NAME } from "./source";
 import type { Me } from "./types";
 
 function initials(name: string): string {
@@ -52,7 +53,7 @@ export function UserMenu({ me }: { me: Me | null }) {
           <div className="menu-head">
             <div className="who">{name}</div>
             <div className="meta">
-              {me?.email ?? (me?.source === "jira" ? "Signed in through Jira" : "Not connected to Jira")}
+              {me?.email ?? (me && me.source !== "sample" ? `Signed in through ${SOURCE_NAME[me.source]}` : "Not connected to Jira or Azure DevOps")}
             </div>
           </div>
           <a className="menu-item" role="menuitem" href="#/settings" onClick={() => setOpen(false)}>

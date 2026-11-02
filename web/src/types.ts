@@ -1,6 +1,7 @@
 export type ItemType = "version" | "sprint" | "epic" | "feature";
 export type StatusCategory = "todo" | "inprogress" | "done";
 export type BoardType = "scrum" | "kanban" | "unknown";
+export type Source = "jira" | "ado" | "sample";
 
 export interface Activity {
   created: string | null;
@@ -21,7 +22,7 @@ export interface RoadmapItem {
   parentKey: string | null;
   activity: Activity | null;
   url: string | null;
-  source: "jira" | "sample";
+  source: Source;
   /** set by the app when the dates were estimated from activity, not planned */
   estimated?: boolean;
   /** set by the app when an Epic had no dates and takes the span of its Features */
@@ -29,7 +30,7 @@ export interface RoadmapItem {
 }
 
 export interface RoadmapResponse {
-  source: "jira" | "sample";
+  source: Source;
   boardType: BoardType;
   fetchedAt: string;
   items: RoadmapItem[];
@@ -39,5 +40,5 @@ export interface RoadmapResponse {
 export interface Me {
   name: string;
   email: string | null;
-  source: "jira" | "sample";
+  source: Source;
 }

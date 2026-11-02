@@ -1,4 +1,6 @@
-import type { BoardType, ItemType, RoadmapItem, StatusCategory } from "./model.js";
+import type { BoardType, ItemType, Me, RoadmapItem, StatusCategory } from "./model.js";
+
+export type { Me } from "./model.js";
 
 export interface JiraConfig {
   baseUrl: string;
@@ -246,15 +248,11 @@ export async function fetchRoadmap(
     else warnings.push(`${jobs[i][0]} couldn't be loaded. ${r.reason instanceof Error ? r.reason.message : ""}`.trim());
   });
   if (settled.every((r) => r.status === "rejected")) {
-    throw new Error("Jira returned an error for every request. Check your URL, email and API token.");
+    const first = settled.find((r): r is PromiseRejectedResult => r.status === "rejected")!.reason;
+    const why = first instanceof Error ? first.message.replace(/\.?$/, ".") + " " : "";
+    throw new Error(`Jira returned an error for every request. ${why}Check your URL, email and API token.`);
   }
   return { items, warnings, boardType };
-}
-
-export interface Me {
-  name: string;
-  email: string | null;
-  source: "jira" | "sample";
 }
 
 /** The Jira account the API token belongs to. */

@@ -31,7 +31,7 @@ h2 { font-size: 15px; font-weight: 600; margin: 0; }
 .sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
 .actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .badge { font-family: var(--mono); font-size: 11px; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--line); }
-.badge.jira { color: var(--c-feature); border-color: var(--c-feature); }
+.badge.jira, .badge.ado { color: var(--c-feature); border-color: var(--c-feature); }
 .btn { font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; min-height: 34px; cursor: pointer; }
 .btn:hover:not(:disabled) { border-color: var(--muted); }
 .btn[aria-expanded="true"] { border-color: var(--accent); }

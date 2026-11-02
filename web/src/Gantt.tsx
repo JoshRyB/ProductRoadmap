@@ -135,7 +135,7 @@ export function Gantt({ items, config, boardType, estimate, collapsed, collapsib
             <div className="empty">
               {Object.values(config).every((l) => !l.show)
                 ? "Nothing is switched on. Choose what to show in Settings."
-                : "Nothing to draw yet. Items need dates in Jira to appear on the timeline."}
+                : "Nothing to draw yet. Items need dates to appear on the timeline."}
             </div>
           )}
 

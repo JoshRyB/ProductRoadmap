@@ -9,6 +9,7 @@ import type { DisplayConfig } from "./config";
 import { renderSvg } from "./exportSvg";
 import { downloadBlob, printSvg, slug, svgBlob, svgToPngBlob } from "./exportFiles";
 import { isoDay } from "./rows";
+import { SOURCE_NAME } from "./source";
 import type { ItemType, Me, RoadmapResponse } from "./types";
 import {
   BUILTIN_VIEWS, MAX_SAVED_VIEWS, collapsedMode, encodeView, loadSavedViews, matchView, storeSavedViews, upsertView, viewFromHash,
@@ -188,7 +189,7 @@ export function App() {
       collapsed,
       title: "Product roadmap",
       viewName,
-      sourceLabel: data?.source === "jira" ? "Source: Jira (read-only)" : "Sample data",
+      sourceLabel: data && data.source !== "sample" ? `Source: ${SOURCE_NAME[data.source]} (read-only)` : "Sample data",
       today,
     });
     return { ...r, file: `roadmap-${slug(viewName)}-${isoDay(today)}` };
@@ -232,7 +233,7 @@ export function App() {
           <div className="sub">
             {data ? (
               <>
-                <span className={`badge ${data.source}`}>{data.source === "jira" ? "Live from Jira" : "Sample data"}</span>{" "}
+                <span className={`badge ${data.source}`}>{data.source === "sample" ? "Sample data" : `Live from ${SOURCE_NAME[data.source]}`}</span>{" "}
                 {shownLayers.length === 0
                   ? "Nothing selected"
                   : shownLayers.map((l) => `${counts[l.type]} ${l.plural}`).join(" · ")}
@@ -254,7 +255,7 @@ export function App() {
           />
           <ShareMenu disabled={!data} link={link} onPng={exportPng} onSvg={exportSvg} onPdf={exportPdf} />
           <button type="button" className="btn" onClick={() => load(true)} disabled={loading}>
-            {loading ? "Refreshing…" : "Refresh from Jira"}
+            {loading ? "Refreshing…" : data && data.source !== "sample" ? `Refresh from ${SOURCE_NAME[data.source]}` : "Refresh"}
           </button>
           <UserMenu me={me} />
         </div>
