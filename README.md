@@ -15,7 +15,7 @@ Sprints are drawn side by side in a single compact lane that stays pinned under 
 | Epics | Epic issues | Start date and Due date |
 | Features and stories | Non-Epic, non-subtask issues | Start date and Due date |
 
-With Epics and Features both on, each Feature sits under its Epic. Anything missing a date is listed under "Not scheduled yet" instead of being hidden.
+With Epics and Features both on, each Feature sits under its Epic. Use the arrow next to an Epic to collapse it to just the Epic bar (a badge shows how many Features are hidden), or the arrow on the section header to collapse or expand them all. Anything missing a date is listed under "Not scheduled yet" instead of being hidden.
 
 The name in the top right is the Jira account the API token belongs to ("Sample user" when running on sample data). There is no separate sign-in yet.
 

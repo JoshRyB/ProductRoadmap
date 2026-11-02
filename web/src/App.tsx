@@ -14,6 +14,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [config, setConfig] = useState<DisplayConfig>(loadConfig);
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [view, setView] = useState<"roadmap" | "settings">(viewFromHash);
 
   useEffect(() => {
@@ -52,6 +53,23 @@ export function App() {
     setConfig(next);
     saveConfig(next);
   };
+
+  const toggleEpic = (key: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  const setAllEpics = (keys: string[], collapse: boolean) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      for (const k of keys) {
+        if (collapse) next.add(k);
+        else next.delete(k);
+      }
+      return next;
+    });
 
   const counts = useMemo(() => {
     const c: Record<ItemType, number> = { version: 0, sprint: 0, epic: 0, feature: 0 };
@@ -96,7 +114,9 @@ export function App() {
       {data?.warnings.map((w) => (
         <div className="note" key={w}>{w}</div>
       ))}
-      {data && <Gantt items={data.items} config={config} />}
+      {data && (
+        <Gantt items={data.items} config={config} collapsed={collapsed} onToggleEpic={toggleEpic} onSetAll={setAllEpics} />
+      )}
     </div>
   );
 }

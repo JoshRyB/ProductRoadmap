@@ -42,9 +42,13 @@ function useWidth(ref: RefObject<HTMLElement | null>): number {
 interface Props {
   items: RoadmapItem[];
   config: DisplayConfig;
+  /** Keys of Epics whose Features are hidden */
+  collapsed: Set<string>;
+  onToggleEpic: (key: string) => void;
+  onSetAll: (keys: string[], collapse: boolean) => void;
 }
 
-export function Gantt({ items, config }: Props) {
+export function Gantt({ items, config, collapsed, onToggleEpic, onSetAll }: Props) {
   const chartRef = useRef<HTMLDivElement>(null);
   const width = useWidth(chartRef);
   const labW = width && width < 640 ? 140 : 240;
@@ -82,6 +86,14 @@ export function Gantt({ items, config }: Props) {
 
   const style = { "--labw": `${labW}px` } as CSSProperties;
   const todayLeft = x(today);
+
+  // Which Epics have Features nested under them, and how many.
+  const kids = new Map<string, number>();
+  for (const r of rows) {
+    if (r.kind === "item" && r.indent && r.item.parentKey) kids.set(r.item.parentKey, (kids.get(r.item.parentKey) ?? 0) + 1);
+  }
+  const epicsWithKids = [...kids.keys()];
+  const allCollapsed = epicsWithKids.length > 0 && epicsWithKids.every((k) => collapsed.has(k));
 
   return (
     <>
@@ -134,6 +146,15 @@ export function Gantt({ items, config }: Props) {
                     <i className="lk" />
                     <span className="nm">{r.label}</span>
                     <span className="key">{r.count}</span>
+                    {r.type === "epic" && epicsWithKids.length > 0 && (
+                      <button
+                        type="button"
+                        className={`twisty${allCollapsed ? "" : " open"}`}
+                        aria-label={allCollapsed ? "Expand all Epics" : "Collapse all Epics"}
+                        title={allCollapsed ? "Expand all Epics" : "Collapse all Epics"}
+                        onClick={() => onSetAll(epicsWithKids, !allCollapsed)}
+                      />
+                    )}
                   </div>
                   <div className="track" style={{ width: W }}>
                     {monthCells.map((ms) => (
@@ -143,9 +164,16 @@ export function Gantt({ items, config }: Props) {
                 </div>
               );
             }
+            if (r.indent && r.item.parentKey && collapsed.has(r.item.parentKey)) return null;
+            const key = r.item.key;
+            const n = key ? (kids.get(key) ?? 0) : 0;
+            const toggle: ToggleProps | null =
+              r.item.type === "epic" && kids.size > 0
+                ? { kids: n, expanded: !(key && collapsed.has(key)), onToggle: () => key && onToggleEpic(key) }
+                : null;
             return (
               <ItemRow key={`${r.item.type}-${r.item.id}`} item={r.item} indent={r.indent} config={config}
-                       W={W} x={x} monthCells={monthCells} />
+                       W={W} x={x} monthCells={monthCells} toggle={toggle} />
             );
           })}
           <div className="today" style={{ left: labW + todayLeft }} />
@@ -250,7 +278,14 @@ function SprintLane({ sprints, config, W, x, monthCells, todayLeft }: SprintLane
   );
 }
 
+interface ToggleProps {
+  kids: number;
+  expanded: boolean;
+  onToggle: () => void;
+}
+
 interface RowProps {
+  toggle: ToggleProps | null;
   item: RoadmapItem;
   indent: boolean;
   config: DisplayConfig;
@@ -259,7 +294,7 @@ interface RowProps {
   monthCells: number[];
 }
 
-function ItemRow({ item, indent, config, W, x, monthCells }: RowProps) {
+function ItemRow({ item, indent, config, W, x, monthCells, toggle }: RowProps) {
   const opts = config[item.type];
   const p = place(item)!;
   const label = `${item.key ? item.key + " · " : ""}${item.title}`;
@@ -309,11 +344,24 @@ function ItemRow({ item, indent, config, W, x, monthCells }: RowProps) {
   return (
     <div className={`row${indent ? " nested" : ""}`} data-type={item.type}>
       <div className="lab" title={tip}>
+        {toggle &&
+          (toggle.kids > 0 ? (
+            <button
+              type="button"
+              className={`twisty${toggle.expanded ? " open" : ""}`}
+              aria-expanded={toggle.expanded}
+              aria-label={`${toggle.expanded ? "Collapse" : "Expand"} ${item.title}, ${toggle.kids} ${toggle.kids === 1 ? "feature" : "features"}`}
+              onClick={toggle.onToggle}
+            />
+          ) : (
+            <span className="twisty-gap" />
+          ))}
         <span className={`dot s-${item.statusCategory}`} />
         <span className="txt">
           <span className="nm">{item.title}</span>
           {opts.name && item.description && <span className="desc">{item.description}</span>}
         </span>
+        {toggle && !toggle.expanded && toggle.kids > 0 && <span className="kids">+{toggle.kids}</span>}
         {item.key && <span className="key">{item.key}</span>}
       </div>
       <div className="track" style={{ width: W }}>
