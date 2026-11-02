@@ -49,24 +49,25 @@ export function Gantt({ items, config }: Props) {
   const width = useWidth(chartRef);
   const labW = width && width < 640 ? 140 : 240;
 
-  const { rows, unscheduled } = useMemo(() => buildRows(items, config), [items, config]);
+  const { rows, sprints, unscheduled } = useMemo(() => buildRows(items, config), [items, config]);
 
   const now = new Date();
   const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
 
   const { vs, months, totalDays } = useMemo(() => {
     const times: number[] = [today];
-    for (const r of rows) {
-      if (r.kind !== "item") continue;
-      const p = place(r.item);
+    const add = (i: RoadmapItem) => {
+      const p = place(i);
       if (p && !p.bad) times.push(p.s, p.e);
-    }
+    };
+    for (const r of rows) if (r.kind === "item") add(r.item);
+    sprints.forEach(add);
     const vs = monthStart(Math.min(...times));
     let months = 0;
     while (addMonths(vs, months) <= Math.max(...times)) months++;
     months = Math.max(months + 1, 6);
     return { vs, months, totalDays: Math.round((addMonths(vs, months) - vs) / DAY) };
-  }, [rows, today]);
+  }, [rows, sprints, today]);
 
   // Stretch the timeline to fill the chart; scroll sideways only when it needs more room.
   const avail = Math.max(width - labW - 2, 0);
@@ -77,40 +78,50 @@ export function Gantt({ items, config }: Props) {
   const monthCells = Array.from({ length: months }, (_, i) => addMonths(vs, i));
   const visibleTypes = new Set<ItemType>(rows.flatMap((r) => (r.kind === "section" ? [r.type] : [])));
   if (rows.some((r) => r.kind === "item" && r.item.type === "feature")) visibleTypes.add("feature");
+  if (sprints.length) visibleTypes.add("sprint");
 
   const style = { "--labw": `${labW}px` } as CSSProperties;
+  const todayLeft = x(today);
 
   return (
     <>
       <div className="chart" ref={chartRef} style={style} role="region" aria-label="Roadmap timeline" tabIndex={0}>
         <div className="inner" style={{ width: labW + W }}>
-          <div className="row strip">
-            <div className="lab" />
-            <div className="track" style={{ width: W }} />
-          </div>
-          <div className="row hdr">
-            <div className="lab">Timeline</div>
-            <div className="track" style={{ width: W }}>
-              {monthCells.map((ms, i) => {
-                const d = new Date(ms);
-                const label = d.toLocaleDateString("en-GB", {
-                  month: "short",
-                  year: d.getUTCMonth() === 0 || i === 0 ? "numeric" : undefined,
-                  timeZone: "UTC",
-                });
-                return (
-                  <div key={ms} className="hcell" style={{ left: x(ms), width: x(addMonths(vs, i + 1)) - x(ms) }}>
-                    {label}
-                  </div>
-                );
-              })}
+          <div className="top">
+            <div className="row strip">
+              <div className="lab" />
+              <div className="track" style={{ width: W }}>
+                <div className="today-mark" style={{ left: todayLeft }}><span>Today</span></div>
+              </div>
             </div>
+            <div className="row hdr">
+              <div className="lab">Timeline</div>
+              <div className="track" style={{ width: W }}>
+                {monthCells.map((ms, i) => {
+                  const d = new Date(ms);
+                  const label = d.toLocaleDateString("en-GB", {
+                    month: "short",
+                    year: d.getUTCMonth() === 0 || i === 0 ? "numeric" : undefined,
+                    timeZone: "UTC",
+                  });
+                  return (
+                    <div key={ms} className="hcell" style={{ left: x(ms), width: x(addMonths(vs, i + 1)) - x(ms) }}>
+                      {label}
+                    </div>
+                  );
+                })}
+                <div className="today-mark" style={{ left: todayLeft }} />
+              </div>
+            </div>
+            {sprints.length > 0 && (
+              <SprintLane sprints={sprints} config={config} W={W} x={x} monthCells={monthCells} todayLeft={todayLeft} />
+            )}
           </div>
 
-          {rows.length === 0 && (
+          {rows.length === 0 && sprints.length === 0 && (
             <div className="empty">
               {Object.values(config).every((l) => !l.show)
-                ? "Nothing is switched on. Choose what to show in Display options."
+                ? "Nothing is switched on. Choose what to show in Settings."
                 : "Nothing to draw yet. Items need dates in Jira to appear on the timeline."}
             </div>
           )}
@@ -137,7 +148,7 @@ export function Gantt({ items, config }: Props) {
                        W={W} x={x} monthCells={monthCells} />
             );
           })}
-          <div className="today" style={{ left: labW + x(today) }}><span>Today</span></div>
+          <div className="today" style={{ left: labW + todayLeft }} />
         </div>
       </div>
 
@@ -167,6 +178,75 @@ export function Gantt({ items, config }: Props) {
         </section>
       )}
     </>
+  );
+}
+
+interface SprintLaneProps {
+  sprints: RoadmapItem[];
+  config: DisplayConfig;
+  W: number;
+  x: (t: number) => number;
+  monthCells: number[];
+  todayLeft: number;
+}
+
+const SPRINT_LANE_H = 26;
+
+/** All sprints in one compact lane. Sprints that overlap in time drop to a second line. */
+function SprintLane({ sprints, config, W, x, monthCells, todayLeft }: SprintLaneProps) {
+  const opts = config.sprint;
+  const laneEnds: number[] = [];
+  const placed = sprints.map((item) => {
+    const p = place(item)!;
+    const left = x(p.s);
+    const barW = Math.max(x(p.e) - left, 14);
+    let lane = laneEnds.findIndex((end) => end <= left);
+    if (lane === -1) lane = laneEnds.push(0) - 1;
+    laneEnds[lane] = left + barW;
+    return { item, p, left, barW, lane };
+  });
+  const height = laneEnds.length * SPRINT_LANE_H + 6;
+
+  return (
+    <div className="row sprint-lane" data-type="sprint" style={{ height }}>
+      <div className="lab">
+        <i className="lk" />
+        <span className="nm">Sprints</span>
+        <span className="key">{sprints.length}</span>
+      </div>
+      <div className="track" style={{ width: W }}>
+        {monthCells.map((ms) => (
+          <div key={ms} className="gl" style={{ left: x(ms) }} />
+        ))}
+        {placed.map(({ item, p, left, barW, lane }) => {
+          if (p.bad) return null;
+          const dates = dateText(p);
+          const label = `${item.title}, ${item.status}, ${dates}`;
+          const tip = [item.title, item.status, dates, item.description].filter(Boolean).join("\n");
+          const nameFits = opts.name && barW >= 20 + item.title.length * CHAR;
+          const bothFit = nameFits && opts.dates && barW >= 28 + (item.title.length + dates.length) * CHAR;
+          const datesOnlyFit = !opts.name && opts.dates && barW >= 20 + dates.length * CHAR;
+          const content = (
+            <>
+              {opts.name && <span className="t">{item.title}</span>}
+              {(bothFit || datesOnlyFit) && <span className="d">{dates}</span>}
+            </>
+          );
+          const props = {
+            className: `bar s-${item.statusCategory}`,
+            style: { left, width: Math.max(barW - 2, 12), top: 3 + lane * SPRINT_LANE_H, height: SPRINT_LANE_H - 4 } as CSSProperties,
+            title: tip,
+            "aria-label": label,
+          };
+          return item.url ? (
+            <a key={item.id} {...props} href={item.url} target="_blank" rel="noreferrer">{content}</a>
+          ) : (
+            <div key={item.id} {...props} tabIndex={0}>{content}</div>
+          );
+        })}
+        <div className="today-mark" style={{ left: todayLeft }} />
+      </div>
+    </div>
   );
 }
 

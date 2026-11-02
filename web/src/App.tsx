@@ -1,16 +1,29 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { DisplayPanel } from "./DisplayPanel";
 import { Gantt } from "./Gantt";
+import { SettingsPage } from "./SettingsPage";
+import { UserMenu } from "./UserMenu";
 import { LAYERS, loadConfig, saveConfig } from "./config";
 import type { DisplayConfig } from "./config";
-import type { ItemType, RoadmapResponse } from "./types";
+import type { ItemType, Me, RoadmapResponse } from "./types";
+
+const viewFromHash = () => (window.location.hash === "#/settings" ? "settings" : "roadmap");
 
 export function App() {
   const [data, setData] = useState<RoadmapResponse | null>(null);
+  const [me, setMe] = useState<Me | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [config, setConfig] = useState<DisplayConfig>(loadConfig);
-  const [panelOpen, setPanelOpen] = useState(false);
+  const [view, setView] = useState<"roadmap" | "settings">(viewFromHash);
+
+  useEffect(() => {
+    const onHash = () => {
+      setView(viewFromHash());
+      window.scrollTo(0, 0);
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
 
   const load = useCallback(async (refresh = false) => {
     setLoading(true);
@@ -29,6 +42,10 @@ export function App() {
 
   useEffect(() => {
     void load();
+    fetch("/api/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((m) => setMe(m as Me | null))
+      .catch(() => setMe(null));
   }, [load]);
 
   const update = (next: DisplayConfig) => {
@@ -41,6 +58,10 @@ export function App() {
     for (const i of data?.items ?? []) c[i.type]++;
     return c;
   }, [data]);
+
+  if (view === "settings") {
+    return <SettingsPage config={config} counts={counts} me={me} source={data?.source ?? null} onChange={update} />;
+  }
 
   const shownLayers = LAYERS.filter((l) => config[l.type].show);
 
@@ -64,24 +85,12 @@ export function App() {
           </div>
         </div>
         <div className="actions">
-          <button
-            type="button"
-            className="btn"
-            aria-expanded={panelOpen}
-            aria-controls="display-panel"
-            onClick={() => setPanelOpen((o) => !o)}
-          >
-            Display options
-          </button>
           <button type="button" className="btn" onClick={() => load(true)} disabled={loading}>
             {loading ? "Refreshing…" : "Refresh from Jira"}
           </button>
+          <UserMenu me={me} />
         </div>
       </header>
-
-      <div id="display-panel" hidden={!panelOpen}>
-        <DisplayPanel config={config} counts={counts} onChange={update} />
-      </div>
 
       {error && <div className="alert" role="alert">Couldn't load the roadmap. {error}</div>}
       {data?.warnings.map((w) => (

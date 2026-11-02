@@ -22,3 +22,9 @@ export interface RoadmapResponse {
   items: RoadmapItem[];
   warnings: string[];
 }
+
+export interface Me {
+  name: string;
+  email: string | null;
+  source: "jira" | "sample";
+}

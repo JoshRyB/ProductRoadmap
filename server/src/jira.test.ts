@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { adfToText, fetchEpics, fetchFeatures, fetchRoadmap, fetchSprints, fetchVersions } from "./jira.js";
+import { adfToText, fetchEpics, fetchFeatures, fetchMe, fetchRoadmap, fetchSprints, fetchVersions } from "./jira.js";
 
 const cfg = { baseUrl: "https://example.atlassian.net", email: "a@b.c", apiToken: "s3cr3t-value", projectKey: "SCRUM" };
 
@@ -157,4 +157,11 @@ test("adfToText flattens, truncates and handles empty", () => {
     { type: "paragraph", content: [{ type: "text", text: "Two" }] },
   ] };
   assert.equal(adfToText(two), "One Two");
+});
+
+test("me: returns the display name and email of the token's account", async () => {
+  mockFetch({ "/rest/api/3/myself": { displayName: "Josh Bell", emailAddress: "josh@example.com", accountId: "abc" } });
+  assert.deepEqual(await fetchMe(cfg), { name: "Josh Bell", email: "josh@example.com", source: "jira" });
+  mockFetch({ "/rest/api/3/myself": { displayName: "No Email" } });
+  assert.equal((await fetchMe(cfg)).email, null);
 });

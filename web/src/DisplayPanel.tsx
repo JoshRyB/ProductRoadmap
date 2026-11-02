@@ -15,14 +15,14 @@ export function DisplayPanel({ config, counts, onChange }: Props) {
   return (
     <section className="panel" aria-label="Display options">
       <div className="panel-head">
-        <h2>What to show</h2>
+        <h2>What to show on the roadmap</h2>
         <button type="button" className="link" onClick={() => onChange(JSON.parse(JSON.stringify(DEFAULT_CONFIG)))}>
           Reset to defaults
         </button>
       </div>
       <div className="opts">
         <div className="opt-row opt-head" aria-hidden="true">
-          <span>Show on the roadmap</span>
+          <span>Show</span>
           <span>Names and descriptions</span>
           <span>Key dates</span>
         </div>

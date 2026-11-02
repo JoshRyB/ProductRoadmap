@@ -221,6 +221,22 @@ export async function fetchRoadmap(c: JiraConfig): Promise<{ items: RoadmapItem[
   return { items, warnings };
 }
 
+export interface Me {
+  name: string;
+  email: string | null;
+  source: "jira" | "sample";
+}
+
+/** The Jira account the API token belongs to. */
+export async function fetchMe(c: JiraConfig): Promise<Me> {
+  const me = await jiraGet(c, "/rest/api/3/myself");
+  return {
+    name: String(me.displayName ?? me.emailAddress ?? "Jira user"),
+    email: typeof me.emailAddress === "string" && me.emailAddress ? me.emailAddress : null,
+    source: "jira",
+  };
+}
+
 export function configFromEnv(env: Record<string, string | undefined>): JiraConfig | null {
   const { JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY, JIRA_START_DATE_FIELD } = env;
   if (!JIRA_BASE_URL || !JIRA_EMAIL || !JIRA_API_TOKEN || !JIRA_PROJECT_KEY) return null;

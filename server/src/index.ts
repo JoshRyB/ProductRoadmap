@@ -2,7 +2,8 @@ import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
-import { configFromEnv, fetchRoadmap } from "./jira.js";
+import { configFromEnv, fetchMe, fetchRoadmap } from "./jira.js";
+import type { Me } from "./jira.js";
 import { sampleItems } from "./sample.js";
 import type { RoadmapResponse } from "./model.js";
 
@@ -13,6 +14,17 @@ let cache: { at: number; body: RoadmapResponse } | null = null;
 const TTL_MS = 60_000;
 
 app.get("/api/health", (_req, res) => res.json({ ok: true, jira: Boolean(jira) }));
+
+let meCache: Me | null = null;
+app.get("/api/me", async (_req, res) => {
+  if (!jira) return res.json({ name: "Sample user", email: null, source: "sample" } satisfies Me);
+  try {
+    meCache ??= await fetchMe(jira);
+    res.json(meCache);
+  } catch (e) {
+    res.status(502).json({ error: e instanceof Error ? e.message : "Could not reach Jira" });
+  }
+});
 
 app.get("/api/roadmap", async (req, res) => {
   const refresh = req.query.refresh === "1";

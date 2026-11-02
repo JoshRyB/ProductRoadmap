@@ -4,7 +4,9 @@ A free roadmap tool for product managers. It pulls your project's timeline from 
 
 ## What it shows
 
-Use **Display options** to choose one or more of these. For each one you can also switch names/descriptions and key dates on or off. Your choices are saved in the browser.
+Open the menu under your name (top right) and choose **Settings** to pick one or more of these. For each one you can also switch names/descriptions and key dates on or off. Your choices are saved in the browser.
+
+Sprints are drawn side by side in a single compact lane that stays pinned under the timeline header while the rest scrolls.
 
 | Layer | Jira source | Dates used |
 | --- | --- | --- |
@@ -14,6 +16,8 @@ Use **Display options** to choose one or more of these. For each one you can als
 | Features and stories | Non-Epic, non-subtask issues | Start date and Due date |
 
 With Epics and Features both on, each Feature sits under its Epic. Anything missing a date is listed under "Not scheduled yet" instead of being hidden.
+
+The name in the top right is the Jira account the API token belongs to ("Sample user" when running on sample data). There is no separate sign-in yet.
 
 Read-only for now. Next: Azure DevOps connector, then the mobile app.
 
@@ -52,6 +56,7 @@ npm run typecheck
 - `web/src/config.ts`: display options and how they are saved
 - `web/src/rows.ts`: decides which rows appear and how Features nest under Epics
 - `web/src/Gantt.tsx`: timeline view
-- `web/src/DisplayPanel.tsx`: the display options panel
+- `web/src/DisplayPanel.tsx`: the display options panel (shown on the Settings screen)
+- `web/src/SettingsPage.tsx`, `web/src/UserMenu.tsx`: the Settings screen and the top-right user menu (the screen is at `#/settings`)
 
 If one kind of item can't be loaded (for example a project with no Scrum board has no sprints), the rest still shows and a note explains what's missing.

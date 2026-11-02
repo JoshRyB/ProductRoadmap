@@ -39,7 +39,14 @@ export type Row =
 const sortKey = (i: RoadmapItem) => pd((i.start ?? i.end) as string);
 const byDate = (a: RoadmapItem, b: RoadmapItem) => sortKey(a) - sortKey(b) || a.title.localeCompare(b.title);
 
-export function buildRows(items: RoadmapItem[], config: DisplayConfig): { rows: Row[]; unscheduled: RoadmapItem[] } {
+export interface Built {
+  rows: Row[];
+  /** Scheduled sprints, drawn together in one pinned lane rather than as rows */
+  sprints: RoadmapItem[];
+  unscheduled: RoadmapItem[];
+}
+
+export function buildRows(items: RoadmapItem[], config: DisplayConfig): Built {
   const rows: Row[] = [];
   const unscheduled: RoadmapItem[] = [];
   const of = (t: ItemType) => items.filter((i) => i.type === t);
@@ -57,13 +64,7 @@ export function buildRows(items: RoadmapItem[], config: DisplayConfig): { rows: 
     }
   }
 
-  if (config.sprint.show) {
-    const s = split(of("sprint"));
-    if (s.length) {
-      rows.push({ kind: "section", type: "sprint", label: "Sprints", count: s.length });
-      s.forEach((item) => rows.push({ kind: "item", item, indent: false }));
-    }
-  }
+  const sprints = config.sprint.show ? split(of("sprint")) : [];
 
   const epics = config.epic.show ? split(of("epic")) : [];
   const features = config.feature.show ? split(of("feature")) : [];
@@ -91,5 +92,5 @@ export function buildRows(items: RoadmapItem[], config: DisplayConfig): { rows: 
     features.forEach((item) => rows.push({ kind: "item", item, indent: false }));
   }
 
-  return { rows, unscheduled };
+  return { rows, sprints, unscheduled };
 }

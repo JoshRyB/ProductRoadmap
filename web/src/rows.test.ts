@@ -76,8 +76,17 @@ test("features only: flat list", () => {
   assert.deepEqual(titles(r.rows), ["# Features and stories", "Gantt", "Orphan", "Under mobile", "Link"]);
 });
 
-test("everything on keeps the section order versions, sprints, epics", () => {
+test("sprints are returned together for one pinned lane, not as rows", () => {
+  const all = [...items, mk("sprint", "Sprint 0", "2026-10-14", "2026-10-27"), mk("sprint", "No dates", null, null)];
+  const r = buildRows(all, cfg({ sprint: true }));
+  assert.deepEqual(r.rows, []);
+  assert.deepEqual(r.sprints.map((i) => i.title), ["Sprint 0", "Sprint 1"]);
+  assert.deepEqual(r.unscheduled.map((i) => i.title), ["No dates"]);
+});
+
+test("everything on keeps the section order versions, epics, features (sprints are separate)", () => {
   const r = buildRows(items, cfg({ version: true, sprint: true, epic: true, feature: true }));
   const sections = r.rows.filter((x) => x.kind === "section").map((x) => (x as { label: string }).label);
-  assert.deepEqual(sections, ["Release versions", "Sprints", "Epics and their features", "Features without a scheduled Epic"]);
+  assert.deepEqual(sections, ["Release versions", "Epics and their features", "Features without a scheduled Epic"]);
+  assert.equal(r.sprints.length, 1);
 });
