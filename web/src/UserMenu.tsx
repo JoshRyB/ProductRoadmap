@@ -59,6 +59,11 @@ export function UserMenu({ me }: { me: Me | null }) {
           <a className="menu-item" role="menuitem" href="#/settings" onClick={() => setOpen(false)}>
             Settings
           </a>
+          {me?.canSignOut && (
+            <form method="post" action="/logout" className="menu-form">
+              <button type="submit" className="menu-item" role="menuitem">Sign out</button>
+            </form>
+          )}
         </div>
       )}
     </div>

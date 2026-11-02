@@ -2,6 +2,27 @@
 
 A free roadmap tool for product managers. It pulls your project's timeline from **Jira** or **Azure DevOps** and draws it on a Gantt-style roadmap.
 
+## Putting it online
+
+The app can run on your own computer or on a host, behind a password. [docs/DEPLOY.md](docs/DEPLOY.md) is a step-by-step guide for someone new to hosting (it uses Render, and a `Dockerfile` and `render.yaml` are included).
+
+How it keeps your work data safe:
+
+| Protection | Detail |
+| --- | --- |
+| Password gate | Set `ACCESS_PASSWORD`. Without a session the server shows only a sign-in page: no data, and none of the app's files. |
+| Fails closed | Hosted (`NODE_ENV=production`) with real data, it **refuses to start** without a password of 12+ characters and a 32+ character `SESSION_SECRET`. |
+| Sessions | Signed (HMAC) cookie that is HttpOnly, SameSite=Strict, Secure and `__Host-` prefixed when hosted; expires after 12 hours; Sign out in the user menu. |
+| Guessing | 5 sign-in attempts per 15 minutes per address, a pause after each wrong one, constant-time comparison. |
+| Other sites | Sign-in and sign-out only accept same-site posts; host names are checked (on your computer only `localhost` is answered), so a web page can't reach the app through your browser. |
+| Browser rules | Strict Content-Security-Policy (no outside scripts), no framing, no sniffing, HSTS when hosted. |
+| Files | Only the built web app is served; paths that climb out of it and dot files are refused. |
+| No packages | The server uses Node's built-in features only. |
+| Local by default | On your own computer it listens only on `127.0.0.1`, so other computers on your network can't reach it. |
+| Read-only | It never writes to Jira or Azure DevOps, and tokens never leave the server. |
+
+This is a single shared password, not individual accounts, and it hasn't had an independent security review. Individual sign-in comes later.
+
 ## Connect Azure DevOps
 
 1. In Azure DevOps, open **User settings > Personal access tokens** and create a token with two read-only scopes: **Work Items: Read** and **Project and Team: Read**.
@@ -54,7 +75,7 @@ These only use planned dates a person set. Estimated and rolled-up dates are nev
 - **Share**: download the current view as a **PNG** (for slides and documents), an **SVG** (vector), or a **PDF** (opens the print dialog; choose Save as PDF). Exports are drawn at a fixed size, so they always show the whole timeline however wide your window is, and include the title, view name, legend, anything not scheduled yet and how many things need attention.
 - **Copy link to this view**: a link that opens the same setup for anyone using the same copy of this app. It carries the setup, not the data, so it only works where the app is running and connected to your Jira.
 
-Read-only for now. Next: one-click sign-in, then the mobile app.
+Read-only for now. Next: individual sign-in with each person's own Jira or Microsoft account, then the mobile app.
 
 ## Run it
 
@@ -80,7 +101,7 @@ The "Start date" field id differs between Jira projects. The server finds it by 
 ## Test
 
 ```bash
-npm test           # connector tests (mocked Jira), layout rules, attention/roll-up logic, views and export
+npm test           # connectors, the secure server (sign-in, limits, file serving), layout rules, views and export
 npm run typecheck
 ```
 
@@ -89,6 +110,7 @@ npm run typecheck
 - `server/src/jira.ts`: Jira connector (versions, sprints, Epics, features; field discovery; normalising to `RoadmapItem`)
 - `server/src/ado.ts`: Azure DevOps connector (work items by query, iterations, iteration folders as releases)
 - `server/src/providers.ts`: picks Jira or Azure DevOps from `server/.env`
+- `server/src/app.ts`, `security.ts`, `settings.ts`, `static.ts`, `loginPage.ts`: the web server (no packages): sign-in, limits, headers, safe file serving, start-up checks
 - `server/src/model.ts`: tool-agnostic item shape that every connector maps into
 - `web/src/config.ts`: display options and how they are saved
 - `web/src/rows.ts`: decides which rows appear and how Features nest under Epics

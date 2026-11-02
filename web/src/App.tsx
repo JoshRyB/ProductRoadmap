@@ -37,6 +37,11 @@ export function App() {
     setError(null);
     try {
       const res = await fetch(`/api/roadmap${refresh ? "?refresh=1" : ""}`);
+      if (res.status === 401) {
+        // The sign-in has ended. Reloading shows the sign-in page.
+        window.location.reload();
+        return;
+      }
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? `Request failed (${res.status})`);
       setData(body as RoadmapResponse);

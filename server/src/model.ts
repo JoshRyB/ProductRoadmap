@@ -47,4 +47,6 @@ export interface Me {
   name: string;
   email: string | null;
   source: Source;
+  /** true when the app has a password, so the menu offers Sign out */
+  canSignOut?: boolean;
 }
