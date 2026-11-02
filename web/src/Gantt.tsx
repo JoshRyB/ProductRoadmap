@@ -2,6 +2,9 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode, RefObject } from "react";
 import { LAYERS } from "./config";
 import type { DisplayConfig } from "./config";
+import { AttentionPanel } from "./AttentionPanel";
+import { derive } from "./derive";
+import type { Insight, Progress } from "./derive";
 import { DAY, buildRows, isoDay, place } from "./rows";
 import type { Pinned } from "./rows";
 import type { Placement } from "./rows";
@@ -60,10 +63,14 @@ export function Gantt({ items, config, boardType, estimate, collapsed, onToggleE
   const now = new Date();
   const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
 
+  const derived = useMemo(() => derive(items, { estimate, today: isoDay(today), boardType }), [items, estimate, today, boardType]);
   const { rows, pinned, unscheduled } = useMemo(
-    () => buildRows(items, config, { boardType, estimate, today: isoDay(today) }),
-    [items, config, boardType, estimate, today]
+    () => buildRows(derived.items, config, { boardType }),
+    [derived.items, config, boardType]
   );
+  // Problems only matter for what the roadmap is planning: Epics and Features.
+  const showAttention = config.epic.show || config.feature.show;
+  const insights = showAttention ? derived.insights : [];
 
   const { vs, months, totalDays } = useMemo(() => {
     const times: number[] = [today];
@@ -92,6 +99,8 @@ export function Gantt({ items, config, boardType, estimate, collapsed, onToggleE
   if (pinned) visibleTypes.add(pinned.type);
   const anyEstimated =
     rows.some((r) => r.kind === "item" && r.item.estimated) || Boolean(pinned?.items.some((i) => i.estimated));
+  const anyRolled = rows.some((r) => r.kind === "item" && r.item.rolledUp);
+  const anyProgress = rows.some((r) => r.kind === "item" && r.item.key && derived.progress.has(r.item.key));
 
   const style = { "--labw": `${labW}px` } as CSSProperties;
   const todayLeft = x(today);
@@ -106,6 +115,7 @@ export function Gantt({ items, config, boardType, estimate, collapsed, onToggleE
 
   return (
     <>
+      {showAttention && <AttentionPanel insights={insights} />}
       <div className="chart" ref={chartRef} style={style} role="region" aria-label="Roadmap timeline" tabIndex={0}>
         <div className="inner" style={{ width: labW + W }}>
           <div className="top">
@@ -182,7 +192,9 @@ export function Gantt({ items, config, boardType, estimate, collapsed, onToggleE
                 : null;
             return (
               <ItemRow key={`${r.item.type}-${r.item.id}`} item={r.item} indent={r.indent} config={config}
-                       W={W} x={x} monthCells={monthCells} toggle={toggle} />
+                       W={W} x={x} monthCells={monthCells} toggle={toggle}
+                       progress={r.item.type === "epic" && key ? (derived.progress.get(key) ?? null) : null}
+                       issues={derived.byItem.get(r.item.id) ?? []} />
             );
           })}
           <div className="today" style={{ left: labW + todayLeft }} />
@@ -196,7 +208,9 @@ export function Gantt({ items, config, boardType, estimate, collapsed, onToggleE
         <span className="sep">Outlined: not started</span>
         <span>Solid: in progress</span>
         <span>Faded: done</span>
+        {anyProgress && <span><i className="sw prog" />Darker fill: Features done</span>}
         {anyEstimated && <span><i className="sw est" />Hatched: estimated from activity</span>}
+        {anyRolled && <span><i className="sw rolled" />Dotted: dates rolled up from Features</span>}
       </div>
 
       {unscheduled.length > 0 && (
@@ -314,6 +328,8 @@ interface ToggleProps {
 
 interface RowProps {
   toggle: ToggleProps | null;
+  progress: Progress | null;
+  issues: Insight[];
   item: RoadmapItem;
   indent: boolean;
   config: DisplayConfig;
@@ -322,14 +338,26 @@ interface RowProps {
   monthCells: number[];
 }
 
-function ItemRow({ item, indent, config, W, x, monthCells, toggle }: RowProps) {
+function ItemRow({ item, indent, config, W, x, monthCells, toggle, progress, issues }: RowProps) {
   const opts = config[item.type];
   const p = place(item)!;
   const label = `${item.key ? item.key + " · " : ""}${item.title}`;
   const dates = dateText(p);
-  const tip = [label, item.status, dates, item.estimated ? "Estimated from activity, not planned" : null, item.description]
+  const pct = progress && progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0;
+  const progressText = progress ? `${progress.done} of ${progress.total} features done (${pct}%)` : null;
+  const tip = [
+    label,
+    item.status,
+    dates,
+    progressText,
+    item.estimated ? "Estimated from activity, not planned" : null,
+    item.rolledUp ? "Dates rolled up from its Features" : null,
+    ...issues.map((n) => `${n.headline}: ${n.detail}`),
+    item.description,
+  ]
     .filter(Boolean)
     .join("\n");
+  const worst = issues[0]?.severity;
 
   // Where the bar sits, and whether its text fits inside it.
   const left = x(p.s);
@@ -358,18 +386,19 @@ function ItemRow({ item, indent, config, W, x, monthCells, toggle }: RowProps) {
     ? { left: left + Math.round((x(p.e) - left) / 2) - 7, width: 14 }
     : { left, width: barW };
   const barProps = {
-    className: `bar s-${item.statusCategory}${p.milestone ? " ms" : ""}${item.estimated ? " est" : ""}`,
+    className: `bar s-${item.statusCategory}${p.milestone ? " ms" : ""}${item.estimated ? " est" : ""}${item.rolledUp ? " rolled" : ""}`,
     style: barStyle,
     title: tip,
-    "aria-label": `${label}, ${item.status}, ${dates}`,
+    "aria-label": `${label}, ${item.status}, ${dates}${progressText ? ", " + progressText : ""}${worst ? ", needs attention" : ""}`,
   };
-  const barText =
-    inside === "none" ? null : (
-      <>
-        {opts.name && <span className="t">{item.title}</span>}
-        {opts.dates && inside === "all" && <span className="d">{dates}</span>}
-      </>
-    );
+  const fill = pct > 0 ? <span className="fill" style={{ width: `${pct}%` }} /> : null;
+  const barText = (
+    <>
+      {fill}
+      {inside !== "none" && opts.name && <span className="t">{item.title}</span>}
+      {inside === "all" && opts.dates && <span className="d">{dates}</span>}
+    </>
+  );
 
   return (
     <div className={`row${indent ? " nested" : ""}`} data-type={item.type}>
@@ -392,6 +421,11 @@ function ItemRow({ item, indent, config, W, x, monthCells, toggle }: RowProps) {
           {opts.name && item.description && <span className="desc">{item.description}</span>}
         </span>
         {toggle && !toggle.expanded && toggle.kids > 0 && <span className="kids">+{toggle.kids}</span>}
+        {worst && (
+          <span className={`flag ${worst}`} role="img" aria-label={`${issues.length} ${issues.length === 1 ? "issue" : "issues"}: ${issues.map((n) => n.headline).join(", ")}`}>
+            !
+          </span>
+        )}
         {item.key && <span className="key">{item.key}</span>}
       </div>
       <div className="track" style={{ width: W }}>

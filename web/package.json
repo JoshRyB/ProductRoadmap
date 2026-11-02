@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test src/rows.test.ts"
+    "test": "tsx --test src/rows.test.ts src/derive.test.ts"
   },
   "dependencies": {
     "react": "^18.3.1",

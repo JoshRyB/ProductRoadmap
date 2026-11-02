@@ -24,6 +24,8 @@ export interface RoadmapItem {
   source: "jira" | "sample";
   /** set by the app when the dates were estimated from activity, not planned */
   estimated?: boolean;
+  /** set by the app when an Epic had no dates and takes the span of its Features */
+  rolledUp?: boolean;
 }
 
 export interface RoadmapResponse {

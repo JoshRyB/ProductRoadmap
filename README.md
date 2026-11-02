@@ -23,6 +23,14 @@ With Epics and Features both on, each Feature sits under its Epic. Use the arrow
 
 The name in the top right is the Jira account the API token belongs to ("Sample user" when running on sample data). There is no separate sign-in yet.
 
+## Keeping the roadmap honest without maintaining it
+
+- **Needs attention** (panel above the timeline): lists overdue work, work that should have started, Features that run past their Epic, in-progress work with no due date (not on Kanban), end dates before start dates, and Epics whose Features are all done. Flags also appear on the affected rows.
+- **Progress on Epic bars**: a darker fill shows how many of the Epic's Features are done.
+- **Rolled-up dates**: an Epic with no dates of its own takes the span of its dated Features. It has a dotted outline so you can tell the dates weren't set by a person.
+
+These only use planned dates a person set. Estimated and rolled-up dates are never reported as overdue.
+
 Read-only for now. Next: Azure DevOps connector, then the mobile app.
 
 ## Run it
@@ -49,7 +57,7 @@ The "Start date" field id differs between Jira projects. The server finds it by 
 ## Test
 
 ```bash
-npm test           # connector tests (mocked Jira) and roadmap layout tests
+npm test           # connector tests (mocked Jira), layout rules and the attention/roll-up logic
 npm run typecheck
 ```
 
@@ -59,6 +67,8 @@ npm run typecheck
 - `server/src/model.ts`: tool-agnostic item shape (Azure DevOps will map into the same shape)
 - `web/src/config.ts`: display options and how they are saved
 - `web/src/rows.ts`: decides which rows appear and how Features nest under Epics
+- `web/src/derive.ts`: estimated and rolled-up dates, progress and the needs-attention rules
+- `web/src/AttentionPanel.tsx`: the needs-attention panel
 - `web/src/Gantt.tsx`: timeline view
 - `web/src/DisplayPanel.tsx`: the display options panel (shown on the Settings screen)
 - `web/src/SettingsPage.tsx`, `web/src/UserMenu.tsx`: the Settings screen and the top-right user menu (the screen is at `#/settings`)

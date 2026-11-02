@@ -47,6 +47,16 @@ export const sampleItems: RoadmapItem[] = [
   item("feature", "f7", "SCRUM-7", "Create API Link with Jira", "todo", "2026-11-11", "2026-11-24", { parentKey: "SCRUM-8", description: "Pull Epics, features, versions and sprints." }),
   item("feature", "f12", "SCRUM-12", "Azure DevOps connector", "todo", "2026-12-01", "2026-12-31", { parentKey: "SCRUM-8" }),
   item("feature", "f13", "SCRUM-13", "CSV export", "todo", null, null, { parentKey: "SCRUM-9" }),
+
+  // Finished work, a feature running past its Epic, and an overdue one, so the demo has something to flag.
+  item("feature", "f14", "SCRUM-14", "Timeline header", "done", "2026-10-28", "2026-10-30", { parentKey: "SCRUM-6" }),
+  item("feature", "f15", "SCRUM-15", "Dependencies view", "todo", "2026-12-01", "2026-12-18", { parentKey: "SCRUM-6", description: "Runs past its Epic's due date." }),
+  item("feature", "f16", "SCRUM-16", "Fix timezone bug", "inprogress", "2026-10-12", "2026-10-30", { parentKey: "SCRUM-6" }),
+
+  // An Epic with no dates of its own: it takes the span of its Features.
+  item("epic", "e17", "SCRUM-17", "Notifications", "todo", null, null, { status: "Idea", description: "Email and Slack alerts." }),
+  item("feature", "f18", "SCRUM-18", "Email digest", "todo", "2027-01-05", "2027-01-29", { parentKey: "SCRUM-17" }),
+  item("feature", "f19", "SCRUM-19", "Slack alerts", "todo", "2027-02-01", "2027-02-26", { parentKey: "SCRUM-17" }),
 ];
 
 /**
