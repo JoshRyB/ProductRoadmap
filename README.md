@@ -31,6 +31,12 @@ The name in the top right is the Jira account the API token belongs to ("Sample 
 
 These only use planned dates a person set. Estimated and rolled-up dates are never reported as overdue.
 
+## Views and sharing
+
+- **Views** (top of the screen): switch the whole roadmap in one click. Standard views are *Executive summary* (releases and Epics), *Delivery detail* (sprints, Epics and all Features) and *Epics, expandable* (Features tucked away). Set the roadmap up how you like and **Save the current setup as** your own view (up to 12, kept in this browser). The button shows which view you're on, or "Custom".
+- **Share**: download the current view as a **PNG** (for slides and documents), an **SVG** (vector), or a **PDF** (opens the print dialog; choose Save as PDF). Exports are drawn at a fixed size, so they always show the whole timeline however wide your window is, and include the title, view name, legend, anything not scheduled yet and how many things need attention.
+- **Copy link to this view**: a link that opens the same setup for anyone using the same copy of this app. It carries the setup, not the data, so it only works where the app is running and connected to your Jira.
+
 Read-only for now. Next: Azure DevOps connector, then the mobile app.
 
 ## Run it
@@ -57,7 +63,7 @@ The "Start date" field id differs between Jira projects. The server finds it by 
 ## Test
 
 ```bash
-npm test           # connector tests (mocked Jira), layout rules and the attention/roll-up logic
+npm test           # connector tests (mocked Jira), layout rules, attention/roll-up logic, views and export
 npm run typecheck
 ```
 
@@ -69,6 +75,9 @@ npm run typecheck
 - `web/src/rows.ts`: decides which rows appear and how Features nest under Epics
 - `web/src/derive.ts`: estimated and rolled-up dates, progress and the needs-attention rules
 - `web/src/AttentionPanel.tsx`: the needs-attention panel
+- `web/src/views.ts`, `web/src/ViewsMenu.tsx`: standard and saved views, and view links
+- `web/src/layout.ts`: layout rules shared by the screen and the export
+- `web/src/exportSvg.ts`, `web/src/exportFiles.ts`, `web/src/ShareMenu.tsx`: image, SVG and PDF export
 - `web/src/Gantt.tsx`: timeline view
 - `web/src/DisplayPanel.tsx`: the display options panel (shown on the Settings screen)
 - `web/src/SettingsPage.tsx`, `web/src/UserMenu.tsx`: the Settings screen and the top-right user menu (the screen is at `#/settings`)

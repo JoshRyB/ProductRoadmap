@@ -1,13 +1,22 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Gantt } from "./Gantt";
 import { SettingsPage } from "./SettingsPage";
+import { ShareMenu } from "./ShareMenu";
 import { UserMenu } from "./UserMenu";
-import { LAYERS, clearSavedChoices, hasSavedConfig, loadConfig, loadEstimate, saveConfig, saveEstimate } from "./config";
-import { DEFAULT_CONFIG } from "./config";
+import { ViewsMenu } from "./ViewsMenu";
+import { DEFAULT_CONFIG, LAYERS, clearSavedChoices, hasSavedConfig, loadConfig, loadEstimate, saveConfig, saveEstimate } from "./config";
 import type { DisplayConfig } from "./config";
+import { renderSvg } from "./exportSvg";
+import { downloadBlob, printSvg, slug, svgBlob, svgToPngBlob } from "./exportFiles";
+import { isoDay } from "./rows";
 import type { ItemType, Me, RoadmapResponse } from "./types";
+import {
+  BUILTIN_VIEWS, MAX_SAVED_VIEWS, collapsedMode, encodeView, loadSavedViews, matchView, storeSavedViews, upsertView, viewFromHash,
+} from "./views";
+import type { SavedView, ViewState } from "./views";
 
-const viewFromHash = () => (window.location.hash === "#/settings" ? "settings" : "roadmap");
+const routeFromHash = (): "roadmap" | "settings" => (window.location.hash.startsWith("#/settings") ? "settings" : "roadmap");
+const newId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
 export function App() {
   const [data, setData] = useState<RoadmapResponse | null>(null);
@@ -18,16 +27,9 @@ export function App() {
   const [configSaved, setConfigSaved] = useState<boolean>(hasSavedConfig);
   const [estimateChoice, setEstimateChoice] = useState<boolean | null>(loadEstimate);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
-  const [view, setView] = useState<"roadmap" | "settings">(viewFromHash);
-
-  useEffect(() => {
-    const onHash = () => {
-      setView(viewFromHash());
-      window.scrollTo(0, 0);
-    };
-    window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
-  }, []);
+  const [pendingCollapseAll, setPendingCollapseAll] = useState(false);
+  const [savedViews, setSavedViews] = useState<SavedView[]>(loadSavedViews);
+  const [view, setView] = useState<"roadmap" | "settings">(routeFromHash);
 
   const load = useCallback(async (refresh = false) => {
     setLoading(true);
@@ -106,6 +108,104 @@ export function App() {
     return c;
   }, [data]);
 
+  // ----- views -----
+  const collapsibleKeys = useMemo(() => {
+    const withKids = new Set((data?.items ?? []).filter((i) => i.type === "feature" && i.parentKey).map((i) => i.parentKey as string));
+    return (data?.items ?? []).filter((i) => i.type === "epic" && i.key && withKids.has(i.key)).map((i) => i.key as string);
+  }, [data]);
+
+  const currentState = useMemo<ViewState>(
+    () => ({ layers: effective, estimate, collapsed: collapsedMode(collapsed, collapsibleKeys) }),
+    [effective, estimate, collapsed, collapsibleKeys]
+  );
+  const matched = useMemo(
+    () => matchView(currentState, [...savedViews, ...BUILTIN_VIEWS], kanban),
+    [currentState, savedViews, kanban]
+  );
+  const viewName = matched ? matched.name : "Custom";
+
+  const applyView = (v: ViewState) => {
+    const layers: DisplayConfig = kanban ? { ...v.layers, sprint: config.sprint } : v.layers;
+    setConfig(layers);
+    saveConfig(layers);
+    setConfigSaved(true);
+    if (v.estimate !== undefined) updateEstimate(v.estimate);
+    if (v.collapsed === "none") setCollapsed(new Set());
+    else if (v.collapsed === "all") setPendingCollapseAll(true);
+    else setCollapsed(new Set(v.collapsed));
+  };
+  // Collapsing "all" needs the data, which may not have arrived yet when a link is opened.
+  useEffect(() => {
+    if (pendingCollapseAll && data) {
+      setCollapsed(new Set(collapsibleKeys));
+      setPendingCollapseAll(false);
+    }
+  }, [pendingCollapseAll, data, collapsibleKeys]);
+
+  const applyRef = useRef(applyView);
+  applyRef.current = applyView;
+
+  // Follow the address: the Settings screen, and links that carry a view.
+  useEffect(() => {
+    const onHash = () => {
+      const fromLink = viewFromHash(window.location.hash);
+      if (fromLink) {
+        applyRef.current(fromLink);
+        window.history.replaceState(null, "", window.location.pathname + window.location.search + "#/");
+      }
+      setView(routeFromHash());
+      window.scrollTo(0, 0);
+    };
+    onHash();
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  const saveView = (name: string): string | null => {
+    if (!name.trim()) return "Enter a name for the view.";
+    const next = upsertView(savedViews, name, currentState, newId);
+    if (!next) return `You can keep up to ${MAX_SAVED_VIEWS} views. Delete one first.`;
+    setSavedViews(next);
+    storeSavedViews(next);
+    return null;
+  };
+  const deleteView = (id: string) => {
+    const next = savedViews.filter((v) => v.id !== id);
+    setSavedViews(next);
+    storeSavedViews(next);
+  };
+
+  // ----- sharing -----
+  const link = `${window.location.origin}${window.location.pathname}#/?view=${encodeView(currentState)}`;
+  const buildExport = () => {
+    const now = new Date();
+    const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+    const r = renderSvg({
+      items: data?.items ?? [],
+      config: effective,
+      boardType,
+      estimate,
+      collapsed,
+      title: "Product roadmap",
+      viewName,
+      sourceLabel: data?.source === "jira" ? "Source: Jira (read-only)" : "Sample data",
+      today,
+    });
+    return { ...r, file: `roadmap-${slug(viewName)}-${isoDay(today)}` };
+  };
+  const exportPng = async () => {
+    const r = buildExport();
+    downloadBlob(await svgToPngBlob(r.svg, r.width, r.height), `${r.file}.png`);
+  };
+  const exportSvg = () => {
+    const r = buildExport();
+    downloadBlob(svgBlob(r.svg), `${r.file}.svg`);
+  };
+  const exportPdf = () => {
+    const r = buildExport();
+    printSvg(r.svg, `Product roadmap - ${viewName}`);
+  };
+
   if (view === "settings") {
     return (
       <SettingsPage
@@ -144,6 +244,15 @@ export function App() {
           </div>
         </div>
         <div className="actions">
+          <ViewsMenu
+            saved={savedViews}
+            matchedId={matched?.id ?? null}
+            matchedName={matched?.name ?? null}
+            onApply={applyView}
+            onSave={saveView}
+            onDelete={deleteView}
+          />
+          <ShareMenu disabled={!data} link={link} onPng={exportPng} onSvg={exportSvg} onPdf={exportPdf} />
           <button type="button" className="btn" onClick={() => load(true)} disabled={loading}>
             {loading ? "Refreshing…" : "Refresh from Jira"}
           </button>
@@ -162,6 +271,7 @@ export function App() {
           boardType={boardType}
           estimate={estimate}
           collapsed={collapsed}
+          collapsibleKeys={collapsibleKeys}
           onToggleEpic={toggleEpic}
           onSetAll={setAllEpics}
         />

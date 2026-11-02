@@ -5,28 +5,12 @@ import type { DisplayConfig } from "./config";
 import { AttentionPanel } from "./AttentionPanel";
 import { derive } from "./derive";
 import type { Insight, Progress } from "./derive";
+import { CHAR, addMonths, dateText, labelPlan, timelineRange } from "./layout";
 import { DAY, buildRows, isoDay, place } from "./rows";
 import type { Pinned } from "./rows";
-import type { Placement } from "./rows";
 import type { BoardType, ItemType, RoadmapItem } from "./types";
 
 const MIN_PPD = 3.2; // pixels per day at the tightest
-const CHAR = 6.7; // rough width of one character at the bar font size
-
-const monthStart = (t: number) => {
-  const d = new Date(t);
-  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1);
-};
-const addMonths = (t: number, n: number) => {
-  const d = new Date(t);
-  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + n, 1);
-};
-const fmt = (t: number) =>
-  new Date(t).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
-
-function dateText(p: Placement): string {
-  return p.milestone ? fmt(p.s) : `${fmt(p.s)} – ${fmt(p.e - DAY)}`;
-}
 
 function useWidth(ref: RefObject<HTMLElement | null>): number {
   const [w, setW] = useState(0);
@@ -51,11 +35,13 @@ interface Props {
   estimate: boolean;
   /** Keys of Epics whose Features are hidden */
   collapsed: Set<string>;
+  /** Every Epic that has Features, so "collapse all" reaches them all */
+  collapsibleKeys: string[];
   onToggleEpic: (key: string) => void;
   onSetAll: (keys: string[], collapse: boolean) => void;
 }
 
-export function Gantt({ items, config, boardType, estimate, collapsed, onToggleEpic, onSetAll }: Props) {
+export function Gantt({ items, config, boardType, estimate, collapsed, collapsibleKeys, onToggleEpic, onSetAll }: Props) {
   const chartRef = useRef<HTMLDivElement>(null);
   const width = useWidth(chartRef);
   const labW = width && width < 640 ? 140 : 240;
@@ -80,11 +66,7 @@ export function Gantt({ items, config, boardType, estimate, collapsed, onToggleE
     };
     for (const r of rows) if (r.kind === "item") add(r.item);
     pinned?.items.forEach(add);
-    const vs = monthStart(Math.min(...times));
-    let months = 0;
-    while (addMonths(vs, months) <= Math.max(...times)) months++;
-    months = Math.max(months + 1, 6);
-    return { vs, months, totalDays: Math.round((addMonths(vs, months) - vs) / DAY) };
+    return timelineRange(times);
   }, [rows, pinned, today]);
 
   // Stretch the timeline to fill the chart; scroll sideways only when it needs more room.
@@ -171,7 +153,7 @@ export function Gantt({ items, config, boardType, estimate, collapsed, onToggleE
                         className={`twisty${allCollapsed ? "" : " open"}`}
                         aria-label={allCollapsed ? "Expand all Epics" : "Collapse all Epics"}
                         title={allCollapsed ? "Expand all Epics" : "Collapse all Epics"}
-                        onClick={() => onSetAll(epicsWithKids, !allCollapsed)}
+                        onClick={() => onSetAll(collapsibleKeys, !allCollapsed)}
                       />
                     )}
                   </div>
@@ -362,25 +344,7 @@ function ItemRow({ item, indent, config, W, x, monthCells, toggle, progress, iss
   // Where the bar sits, and whether its text fits inside it.
   const left = x(p.s);
   const barW = p.milestone ? 14 : Math.max(x(p.e) - left, 14);
-  const textW = (s: string) => s.length * CHAR;
-  const parts: string[] = [];
-  if (opts.name) parts.push(item.title);
-  if (opts.dates) parts.push(dates);
-  const fullW = 20 + parts.reduce((n, s) => n + textW(s), 0) + (parts.length > 1 ? 8 : 0);
-  const nameW = opts.name ? 20 + textW(item.title) : Infinity;
-  const inside: "all" | "name" | "none" =
-    p.milestone || parts.length === 0 ? "none" : barW >= fullW ? "all" : barW >= nameW ? "name" : "none";
-
-  // Whatever doesn't fit inside is written beside the bar instead.
-  const outside: Array<{ text: string; cls: "t" | "d" }> = [];
-  if (inside === "none") {
-    if (opts.name) outside.push({ text: item.title, cls: "t" });
-    if (opts.dates) outside.push({ text: dates, cls: "d" });
-  } else if (inside === "name" && opts.dates) {
-    outside.push({ text: dates, cls: "d" });
-  }
-  const outsideW = outside.reduce((n, o) => n + textW(o.text), 0) + (outside.length > 1 ? 8 : 0) + 12;
-  const flip = left + barW + outsideW > W && left - outsideW > 0;
+  const { inside, outside, flip } = labelPlan(item.title, dates, opts, { left, barW, W, milestone: p.milestone });
 
   const barStyle: CSSProperties = p.milestone
     ? { left: left + Math.round((x(p.e) - left) / 2) - 7, width: 14 }
