@@ -148,3 +148,15 @@ h2 { font-size: 15px; font-weight: 600; margin: 0; }
 .twisty.open::before { transform: rotate(45deg); top: 4px; }
 .twisty-gap { flex: 0 0 auto; width: 14px; }
 .kids { flex: 0 0 auto; font-family: var(--mono); font-size: 10px; color: var(--c, var(--muted)); border: 1px solid var(--c, var(--line)); border-radius: 999px; padding: 0 6px; }
+
+/* estimated dates, kanban note */
+.bar.est { background-image: repeating-linear-gradient(135deg, transparent 0 6px, rgb(0 0 0 / 0.16) 6px 9px); border-style: dashed; }
+.sw.est { background-color: var(--muted); background-image: repeating-linear-gradient(135deg, transparent 0 4px, rgb(255 255 255 / 0.45) 4px 6px); }
+.callout { background: var(--warn-bg); color: var(--warn-fg); border-radius: 8px; padding: 10px 12px; font-size: 13px; margin: 0 0 10px; }
+.callout strong { font-weight: 600; }
+.opt-row.off .check.main > span:not(.sub-note) { opacity: 0.55; }
+.sub-note { font-size: 11px; color: var(--muted); margin-left: 4px; }
+.estimate { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
+.estimate .hint { margin: 4px 0 0 25px; }
+.pin-label { position: absolute; display: flex; gap: 6px; align-items: center; font-size: 11px; white-space: nowrap; z-index: 2; height: 18px; }
+.pin-label .t { font-weight: 500; } .pin-label .d { font-family: var(--mono); font-size: 10px; color: var(--muted); }

@@ -1,5 +1,5 @@
 import type { DisplayConfig } from "./config";
-import type { ItemType, RoadmapItem } from "./types";
+import type { BoardType, ItemType, RoadmapItem } from "./types";
 
 export const DAY = 864e5;
 
@@ -7,6 +7,8 @@ export const pd = (s: string): number => {
   const [y, m, d] = s.split("-").map(Number);
   return Date.UTC(y, m - 1, d);
 };
+
+export const isoDay = (t: number): string => new Date(t).toISOString().slice(0, 10);
 
 export interface Placement {
   /** start of the bar, UTC ms */
@@ -32,6 +34,29 @@ export function place(item: RoadmapItem): Placement | null {
   return null;
 }
 
+/**
+ * Fills in missing dates for Epics and Features from what actually happened, so work with no
+ * planned dates (typical on Kanban boards) can still be drawn. Items not yet started are left alone.
+ * Anything this changes is flagged `estimated` so it can be drawn differently.
+ */
+export function applyEstimates(items: RoadmapItem[], todayIso: string): RoadmapItem[] {
+  return items.map((item) => {
+    if ((item.type !== "epic" && item.type !== "feature") || (item.start && item.end) || !item.activity) return item;
+    const a = item.activity;
+    let start = item.start;
+    let end = item.end;
+    if (item.statusCategory === "inprogress") {
+      start = start ?? a.statusChanged;
+      end = end ?? (start ? todayIso : null);
+    } else if (item.statusCategory === "done") {
+      end = end ?? a.resolved ?? a.statusChanged;
+      start = start ?? a.created;
+    }
+    if (!start || !end || end < start) return item;
+    return { ...item, start, end, estimated: true };
+  });
+}
+
 export type Row =
   | { kind: "section"; type: ItemType; label: string; count: number }
   | { kind: "item"; item: RoadmapItem; indent: boolean };
@@ -39,32 +64,57 @@ export type Row =
 const sortKey = (i: RoadmapItem) => pd((i.start ?? i.end) as string);
 const byDate = (a: RoadmapItem, b: RoadmapItem) => sortKey(a) - sortKey(b) || a.title.localeCompare(b.title);
 
+export interface Pinned {
+  type: ItemType;
+  label: string;
+  items: RoadmapItem[];
+}
+
 export interface Built {
   rows: Row[];
-  /** Scheduled sprints, drawn together in one pinned lane rather than as rows */
-  sprints: RoadmapItem[];
+  /** One compact lane kept under the timeline header: sprints, or releases on a Kanban project */
+  pinned: Pinned | null;
   unscheduled: RoadmapItem[];
 }
 
-export function buildRows(items: RoadmapItem[], config: DisplayConfig): Built {
+export interface BuildOptions {
+  boardType?: BoardType;
+  /** estimate missing dates from activity */
+  estimate?: boolean;
+  /** YYYY-MM-DD, for estimates of work still in progress */
+  today?: string;
+}
+
+export function buildRows(items: RoadmapItem[], config: DisplayConfig, opts: BuildOptions = {}): Built {
+  const kanban = opts.boardType === "kanban";
+  const source = opts.estimate ? applyEstimates(items, opts.today ?? isoDay(Date.now())) : items;
+
   const rows: Row[] = [];
   const unscheduled: RoadmapItem[] = [];
-  const of = (t: ItemType) => items.filter((i) => i.type === t);
+  const of = (t: ItemType) => source.filter((i) => i.type === t);
   const split = (list: RoadmapItem[]) => {
     const placed = list.filter((i) => place(i)).sort(byDate);
     for (const i of list) if (!place(i)) unscheduled.push(i);
     return placed;
   };
 
+  let pinned: Pinned | null = null;
+
   if (config.version.show) {
     const v = split(of("version"));
-    if (v.length) {
+    if (kanban) {
+      // No sprints on a Kanban project, so releases take the compact pinned lane.
+      if (v.length) pinned = { type: "version", label: "Releases", items: v };
+    } else if (v.length) {
       rows.push({ kind: "section", type: "version", label: "Release versions", count: v.length });
       v.forEach((item) => rows.push({ kind: "item", item, indent: false }));
     }
   }
 
-  const sprints = config.sprint.show ? split(of("sprint")) : [];
+  if (config.sprint.show && !kanban) {
+    const sp = split(of("sprint"));
+    if (sp.length) pinned = { type: "sprint", label: "Sprints", items: sp };
+  }
 
   const epics = config.epic.show ? split(of("epic")) : [];
   const features = config.feature.show ? split(of("feature")) : [];
@@ -92,5 +142,5 @@ export function buildRows(items: RoadmapItem[], config: DisplayConfig): Built {
     features.forEach((item) => rows.push({ kind: "item", item, indent: false }));
   }
 
-  return { rows, sprints, unscheduled };
+  return { rows, pinned, unscheduled };
 }

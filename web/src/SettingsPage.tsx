@@ -1,17 +1,27 @@
 import { DisplayPanel } from "./DisplayPanel";
 import { UserMenu } from "./UserMenu";
 import type { DisplayConfig } from "./config";
-import type { ItemType, Me } from "./types";
+import type { BoardType, ItemType, Me } from "./types";
 
 interface Props {
   config: DisplayConfig;
   counts: Record<ItemType, number>;
   me: Me | null;
   source: "jira" | "sample" | null;
+  boardType: BoardType;
+  estimate: boolean;
   onChange: (next: DisplayConfig) => void;
+  onEstimate: (on: boolean) => void;
+  onReset: () => void;
 }
 
-export function SettingsPage({ config, counts, me, source, onChange }: Props) {
+const BOARD_TEXT: Record<BoardType, string> = {
+  scrum: "Scrum (has sprints)",
+  kanban: "Kanban (no sprints)",
+  unknown: "Not detected",
+};
+
+export function SettingsPage({ config, counts, me, source, boardType, estimate, onChange, onEstimate, onReset }: Props) {
   return (
     <div className="wrap">
       <header>
@@ -24,7 +34,15 @@ export function SettingsPage({ config, counts, me, source, onChange }: Props) {
         </div>
       </header>
 
-      <DisplayPanel config={config} counts={counts} onChange={onChange} />
+      <DisplayPanel
+        config={config}
+        counts={counts}
+        boardType={boardType}
+        estimate={estimate}
+        onChange={onChange}
+        onEstimate={onEstimate}
+        onReset={onReset}
+      />
 
       <section className="panel" aria-label="Account">
         <div className="panel-head"><h2>Account</h2></div>
@@ -35,6 +53,8 @@ export function SettingsPage({ config, counts, me, source, onChange }: Props) {
           <dd>{me?.email ?? "Not available"}</dd>
           <dt>Data source</dt>
           <dd>{source === "jira" ? "Jira (read-only)" : "Sample data"}</dd>
+          <dt>Board type</dt>
+          <dd>{BOARD_TEXT[boardType]}</dd>
         </dl>
       </section>
     </div>

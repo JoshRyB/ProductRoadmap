@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, RefObject } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties, ReactNode, RefObject } from "react";
 import { LAYERS } from "./config";
 import type { DisplayConfig } from "./config";
-import { DAY, buildRows, place } from "./rows";
+import { DAY, buildRows, isoDay, place } from "./rows";
+import type { Pinned } from "./rows";
 import type { Placement } from "./rows";
-import type { ItemType, RoadmapItem } from "./types";
+import type { BoardType, ItemType, RoadmapItem } from "./types";
 
 const MIN_PPD = 3.2; // pixels per day at the tightest
 const CHAR = 6.7; // rough width of one character at the bar font size
@@ -42,21 +43,27 @@ function useWidth(ref: RefObject<HTMLElement | null>): number {
 interface Props {
   items: RoadmapItem[];
   config: DisplayConfig;
+  boardType: BoardType;
+  /** estimate missing dates from activity */
+  estimate: boolean;
   /** Keys of Epics whose Features are hidden */
   collapsed: Set<string>;
   onToggleEpic: (key: string) => void;
   onSetAll: (keys: string[], collapse: boolean) => void;
 }
 
-export function Gantt({ items, config, collapsed, onToggleEpic, onSetAll }: Props) {
+export function Gantt({ items, config, boardType, estimate, collapsed, onToggleEpic, onSetAll }: Props) {
   const chartRef = useRef<HTMLDivElement>(null);
   const width = useWidth(chartRef);
   const labW = width && width < 640 ? 140 : 240;
 
-  const { rows, sprints, unscheduled } = useMemo(() => buildRows(items, config), [items, config]);
-
   const now = new Date();
   const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+
+  const { rows, pinned, unscheduled } = useMemo(
+    () => buildRows(items, config, { boardType, estimate, today: isoDay(today) }),
+    [items, config, boardType, estimate, today]
+  );
 
   const { vs, months, totalDays } = useMemo(() => {
     const times: number[] = [today];
@@ -65,13 +72,13 @@ export function Gantt({ items, config, collapsed, onToggleEpic, onSetAll }: Prop
       if (p && !p.bad) times.push(p.s, p.e);
     };
     for (const r of rows) if (r.kind === "item") add(r.item);
-    sprints.forEach(add);
+    pinned?.items.forEach(add);
     const vs = monthStart(Math.min(...times));
     let months = 0;
     while (addMonths(vs, months) <= Math.max(...times)) months++;
     months = Math.max(months + 1, 6);
     return { vs, months, totalDays: Math.round((addMonths(vs, months) - vs) / DAY) };
-  }, [rows, sprints, today]);
+  }, [rows, pinned, today]);
 
   // Stretch the timeline to fill the chart; scroll sideways only when it needs more room.
   const avail = Math.max(width - labW - 2, 0);
@@ -82,7 +89,9 @@ export function Gantt({ items, config, collapsed, onToggleEpic, onSetAll }: Prop
   const monthCells = Array.from({ length: months }, (_, i) => addMonths(vs, i));
   const visibleTypes = new Set<ItemType>(rows.flatMap((r) => (r.kind === "section" ? [r.type] : [])));
   if (rows.some((r) => r.kind === "item" && r.item.type === "feature")) visibleTypes.add("feature");
-  if (sprints.length) visibleTypes.add("sprint");
+  if (pinned) visibleTypes.add(pinned.type);
+  const anyEstimated =
+    rows.some((r) => r.kind === "item" && r.item.estimated) || Boolean(pinned?.items.some((i) => i.estimated));
 
   const style = { "--labw": `${labW}px` } as CSSProperties;
   const todayLeft = x(today);
@@ -125,12 +134,12 @@ export function Gantt({ items, config, collapsed, onToggleEpic, onSetAll }: Prop
                 <div className="today-mark" style={{ left: todayLeft }} />
               </div>
             </div>
-            {sprints.length > 0 && (
-              <SprintLane sprints={sprints} config={config} W={W} x={x} monthCells={monthCells} todayLeft={todayLeft} />
+            {pinned && (
+              <PinnedLane pinned={pinned} config={config} W={W} x={x} monthCells={monthCells} todayLeft={todayLeft} />
             )}
           </div>
 
-          {rows.length === 0 && sprints.length === 0 && (
+          {rows.length === 0 && !pinned && (
             <div className="empty">
               {Object.values(config).every((l) => !l.show)
                 ? "Nothing is switched on. Choose what to show in Settings."
@@ -187,6 +196,7 @@ export function Gantt({ items, config, collapsed, onToggleEpic, onSetAll }: Prop
         <span className="sep">Outlined: not started</span>
         <span>Solid: in progress</span>
         <span>Faded: done</span>
+        {anyEstimated && <span><i className="sw est" />Hatched: estimated from activity</span>}
       </div>
 
       {unscheduled.length > 0 && (
@@ -209,8 +219,8 @@ export function Gantt({ items, config, collapsed, onToggleEpic, onSetAll }: Prop
   );
 }
 
-interface SprintLaneProps {
-  sprints: RoadmapItem[];
+interface PinnedLaneProps {
+  pinned: Pinned;
   config: DisplayConfig;
   W: number;
   x: (t: number) => number;
@@ -218,58 +228,76 @@ interface SprintLaneProps {
   todayLeft: number;
 }
 
-const SPRINT_LANE_H = 26;
+const LANE_H = 26;
 
-/** All sprints in one compact lane. Sprints that overlap in time drop to a second line. */
-function SprintLane({ sprints, config, W, x, monthCells, todayLeft }: SprintLaneProps) {
-  const opts = config.sprint;
+/** One compact lane (sprints, or releases on a Kanban project). Items that would collide drop to a second line. */
+function PinnedLane({ pinned, config, W, x, monthCells, todayLeft }: PinnedLaneProps) {
+  const opts = config[pinned.type];
   const laneEnds: number[] = [];
-  const placed = sprints.map((item) => {
+  const placed = pinned.items.map((item) => {
     const p = place(item)!;
+    const dates = dateText(p);
     const left = x(p.s);
-    const barW = Math.max(x(p.e) - left, 14);
-    let lane = laneEnds.findIndex((end) => end <= left);
+    const barW = p.milestone ? 14 : Math.max(x(p.e) - left, 14);
+    const from = p.milestone ? left + Math.round((x(p.e) - left) / 2) - 7 : left;
+    // A diamond carries its label beside it, so that space counts as taken.
+    const labelW = p.milestone
+      ? 8 + (opts.name ? item.title.length * CHAR : 0) + (opts.dates ? (opts.name ? 8 : 0) + dates.length * CHAR : 0)
+      : 0;
+    let lane = laneEnds.findIndex((end) => end <= from);
     if (lane === -1) lane = laneEnds.push(0) - 1;
-    laneEnds[lane] = left + barW;
-    return { item, p, left, barW, lane };
+    laneEnds[lane] = from + barW + labelW;
+    return { item, p, dates, from, barW, lane };
   });
-  const height = laneEnds.length * SPRINT_LANE_H + 6;
+  const height = laneEnds.length * LANE_H + 6;
 
   return (
-    <div className="row sprint-lane" data-type="sprint" style={{ height }}>
+    <div className="row sprint-lane" data-type={pinned.type} style={{ height }}>
       <div className="lab">
         <i className="lk" />
-        <span className="nm">Sprints</span>
-        <span className="key">{sprints.length}</span>
+        <span className="nm">{pinned.label}</span>
+        <span className="key">{pinned.items.length}</span>
       </div>
       <div className="track" style={{ width: W }}>
         {monthCells.map((ms) => (
           <div key={ms} className="gl" style={{ left: x(ms) }} />
         ))}
-        {placed.map(({ item, p, left, barW, lane }) => {
+        {placed.map(({ item, p, dates, from, barW, lane }) => {
           if (p.bad) return null;
-          const dates = dateText(p);
           const label = `${item.title}, ${item.status}, ${dates}`;
           const tip = [item.title, item.status, dates, item.description].filter(Boolean).join("\n");
-          const nameFits = opts.name && barW >= 20 + item.title.length * CHAR;
-          const bothFit = nameFits && opts.dates && barW >= 28 + (item.title.length + dates.length) * CHAR;
-          const datesOnlyFit = !opts.name && opts.dates && barW >= 20 + dates.length * CHAR;
-          const content = (
-            <>
-              {opts.name && <span className="t">{item.title}</span>}
-              {(bothFit || datesOnlyFit) && <span className="d">{dates}</span>}
-            </>
-          );
-          const props = {
-            className: `bar s-${item.statusCategory}`,
-            style: { left, width: Math.max(barW - 2, 12), top: 3 + lane * SPRINT_LANE_H, height: SPRINT_LANE_H - 4 } as CSSProperties,
-            title: tip,
-            "aria-label": label,
-          };
-          return item.url ? (
-            <a key={item.id} {...props} href={item.url} target="_blank" rel="noreferrer">{content}</a>
-          ) : (
-            <div key={item.id} {...props} tabIndex={0}>{content}</div>
+          const top = 3 + lane * LANE_H;
+          const cls = `bar s-${item.statusCategory}${p.milestone ? " ms" : ""}`;
+          let content: ReactNode = null;
+          if (!p.milestone) {
+            const nameFits = opts.name && barW >= 20 + item.title.length * CHAR;
+            const bothFit = nameFits && opts.dates && barW >= 28 + (item.title.length + dates.length) * CHAR;
+            const datesOnlyFit = !opts.name && opts.dates && barW >= 20 + dates.length * CHAR;
+            content = (
+              <>
+                {opts.name && <span className="t">{item.title}</span>}
+                {(bothFit || datesOnlyFit) && <span className="d">{dates}</span>}
+              </>
+            );
+          }
+          const style: CSSProperties = p.milestone
+            ? { left: from, width: 14, top: top + 4 }
+            : { left: from, width: Math.max(barW - 2, 12), top, height: LANE_H - 4 };
+          const props = { className: cls, style, title: tip, "aria-label": label };
+          return (
+            <Fragment key={item.id}>
+              {item.url ? (
+                <a {...props} href={item.url} target="_blank" rel="noreferrer">{content}</a>
+              ) : (
+                <div {...props} tabIndex={0}>{content}</div>
+              )}
+              {p.milestone && (opts.name || opts.dates) && (
+                <span className="pin-label" style={{ left: from + 14 + 8, top: top + 2 }}>
+                  {opts.name && <span className="t">{item.title}</span>}
+                  {opts.dates && <span className="d">{dates}</span>}
+                </span>
+              )}
+            </Fragment>
           );
         })}
         <div className="today-mark" style={{ left: todayLeft }} />
@@ -299,7 +327,9 @@ function ItemRow({ item, indent, config, W, x, monthCells, toggle }: RowProps) {
   const p = place(item)!;
   const label = `${item.key ? item.key + " · " : ""}${item.title}`;
   const dates = dateText(p);
-  const tip = [label, item.status, dates, item.description].filter(Boolean).join("\n");
+  const tip = [label, item.status, dates, item.estimated ? "Estimated from activity, not planned" : null, item.description]
+    .filter(Boolean)
+    .join("\n");
 
   // Where the bar sits, and whether its text fits inside it.
   const left = x(p.s);
@@ -328,7 +358,7 @@ function ItemRow({ item, indent, config, W, x, monthCells, toggle }: RowProps) {
     ? { left: left + Math.round((x(p.e) - left) / 2) - 7, width: 14 }
     : { left, width: barW };
   const barProps = {
-    className: `bar s-${item.statusCategory}${p.milestone ? " ms" : ""}`,
+    className: `bar s-${item.statusCategory}${p.milestone ? " ms" : ""}${item.estimated ? " est" : ""}`,
     style: barStyle,
     title: tip,
     "aria-label": `${label}, ${item.status}, ${dates}`,

@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Gantt } from "./Gantt";
 import { SettingsPage } from "./SettingsPage";
 import { UserMenu } from "./UserMenu";
-import { LAYERS, loadConfig, saveConfig } from "./config";
+import { LAYERS, clearSavedChoices, hasSavedConfig, loadConfig, loadEstimate, saveConfig, saveEstimate } from "./config";
+import { DEFAULT_CONFIG } from "./config";
 import type { DisplayConfig } from "./config";
 import type { ItemType, Me, RoadmapResponse } from "./types";
 
@@ -14,6 +15,8 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [config, setConfig] = useState<DisplayConfig>(loadConfig);
+  const [configSaved, setConfigSaved] = useState<boolean>(hasSavedConfig);
+  const [estimateChoice, setEstimateChoice] = useState<boolean | null>(loadEstimate);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [view, setView] = useState<"roadmap" | "settings">(viewFromHash);
 
@@ -49,9 +52,35 @@ export function App() {
       .catch(() => setMe(null));
   }, [load]);
 
+  const boardType = data?.boardType ?? "unknown";
+  const kanban = boardType === "kanban";
+
+  // On a Kanban project there are no sprints, and (until the person chooses) releases and
+  // estimated dates are on by default because dates are often left blank there.
+  const effective = useMemo<DisplayConfig>(() => {
+    if (!kanban) return config;
+    const c: DisplayConfig = { ...config, sprint: { ...config.sprint, show: false } };
+    if (!configSaved) c.version = { ...c.version, show: true };
+    return c;
+  }, [config, kanban, configSaved]);
+  const estimate = estimateChoice ?? kanban;
+
   const update = (next: DisplayConfig) => {
-    setConfig(next);
-    saveConfig(next);
+    // Don't save the forced "no sprints" as the person's own choice.
+    const toSave: DisplayConfig = kanban ? { ...next, sprint: config.sprint } : next;
+    setConfig(toSave);
+    saveConfig(toSave);
+    setConfigSaved(true);
+  };
+  const updateEstimate = (on: boolean) => {
+    setEstimateChoice(on);
+    saveEstimate(on);
+  };
+  const reset = () => {
+    clearSavedChoices();
+    setConfig(JSON.parse(JSON.stringify(DEFAULT_CONFIG)));
+    setConfigSaved(false);
+    setEstimateChoice(null);
   };
 
   const toggleEpic = (key: string) =>
@@ -78,10 +107,22 @@ export function App() {
   }, [data]);
 
   if (view === "settings") {
-    return <SettingsPage config={config} counts={counts} me={me} source={data?.source ?? null} onChange={update} />;
+    return (
+      <SettingsPage
+        config={effective}
+        counts={counts}
+        me={me}
+        source={data?.source ?? null}
+        boardType={boardType}
+        estimate={estimate}
+        onChange={update}
+        onEstimate={updateEstimate}
+        onReset={reset}
+      />
+    );
   }
 
-  const shownLayers = LAYERS.filter((l) => config[l.type].show);
+  const shownLayers = LAYERS.filter((l) => effective[l.type].show);
 
   return (
     <div className="wrap">
@@ -115,7 +156,15 @@ export function App() {
         <div className="note" key={w}>{w}</div>
       ))}
       {data && (
-        <Gantt items={data.items} config={config} collapsed={collapsed} onToggleEpic={toggleEpic} onSetAll={setAllEpics} />
+        <Gantt
+          items={data.items}
+          config={effective}
+          boardType={boardType}
+          estimate={estimate}
+          collapsed={collapsed}
+          onToggleEpic={toggleEpic}
+          onSetAll={setAllEpics}
+        />
       )}
     </div>
   );

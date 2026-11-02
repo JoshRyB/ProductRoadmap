@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { adfToText, fetchEpics, fetchFeatures, fetchMe, fetchRoadmap, fetchSprints, fetchVersions } from "./jira.js";
+import { adfToText, boardTypeOf, fetchEpics, fetchFeatures, fetchMe, fetchRoadmap, fetchSprints, fetchVersions } from "./jira.js";
 
 const cfg = { baseUrl: "https://example.atlassian.net", email: "a@b.c", apiToken: "s3cr3t-value", projectKey: "SCRUM" };
 
@@ -164,4 +164,50 @@ test("me: returns the display name and email of the token's account", async () =
   assert.deepEqual(await fetchMe(cfg), { name: "Josh Bell", email: "josh@example.com", source: "jira" });
   mockFetch({ "/rest/api/3/myself": { displayName: "No Email" } });
   assert.equal((await fetchMe(cfg)).email, null);
+});
+
+test("activity dates are read from created, status category changed and resolved", async () => {
+  mockFetch({
+    "/rest/api/3/field": fields,
+    "/rest/api/3/search/jql": {
+      issues: [{ id: "1", key: "KAN-5", fields: {
+        summary: "Guest checkout", parent: { key: "KAN-1" },
+        created: "2026-09-01T09:30:00.000+0100", statuscategorychangedate: "2026-10-05T14:02:11.000+0100", resolutiondate: null,
+        status: { name: "In Progress", statusCategory: { key: "indeterminate" } } } }],
+      isLast: true,
+    },
+  });
+  const [f] = await fetchFeatures(cfg);
+  assert.deepEqual(f.activity, { created: "2026-09-01", statusChanged: "2026-10-05", resolved: null });
+  assert.equal(f.statusCategory, "inprogress");
+});
+
+test("board type: scrum wins, boards without scrum mean kanban, none is unknown", () => {
+  assert.equal(boardTypeOf([{ id: 1, type: "kanban" }, { id: 2, type: "scrum" }]), "scrum");
+  assert.equal(boardTypeOf([{ id: 1, type: "kanban" }]), "kanban");
+  assert.equal(boardTypeOf([]), "unknown");
+});
+
+test("roadmap: a kanban project has no sprints and is reported as kanban", async () => {
+  mockFetch({
+    "/rest/agile/1.0/board": { values: [{ id: 7, type: "kanban" }] },
+    "/rest/api/3/field": fields,
+    "/rest/api/3/search/jql": { issues: [epicIssue], isLast: true },
+    "/rest/api/3/project/SCRUM/version": { isLast: true, values: [{ id: "1", name: "v1", releaseDate: "2026-12-18" }] },
+  });
+  const r = await fetchRoadmap(cfg);
+  assert.equal(r.boardType, "kanban");
+  assert.equal(r.items.filter((i) => i.type === "sprint").length, 0);
+  assert.equal(r.warnings.length, 0);
+});
+
+test("roadmap: board lookup failing reports unknown and still shows the rest", async () => {
+  mockFetch({
+    "/rest/api/3/field": fields,
+    "/rest/api/3/search/jql": { issues: [epicIssue], isLast: true },
+    "/rest/api/3/project/SCRUM/version": { isLast: true, values: [] },
+  });
+  const r = await fetchRoadmap(cfg);
+  assert.equal(r.boardType, "unknown");
+  assert.ok(r.items.some((i) => i.type === "epic"));
 });

@@ -15,6 +15,10 @@ Sprints are drawn side by side in a single compact lane that stays pinned under 
 | Epics | Epic issues | Start date and Due date |
 | Features and stories | Non-Epic, non-subtask issues | Start date and Due date |
 
+**Scrum and Kanban.** On a Scrum project, Sprints appear in a pinned lane. If the app detects a Kanban project (boards but no Scrum board), Settings says so, Sprints is switched off, and Release versions take the pinned lane instead. A setting, **Estimate missing dates from activity**, draws Epics and features that have no dates from when they actually started (or were created) until today (or until resolved). Those bars are hatched so they aren't mistaken for a plan, and work that hasn't started stays under "Not scheduled yet". On Kanban projects this is on and Release versions are shown until you choose otherwise; **Reset to defaults** returns to that.
+
+To see the Kanban view on sample data, run the server with `SAMPLE_BOARD=kanban`.
+
 With Epics and Features both on, each Feature sits under its Epic. Use the arrow next to an Epic to collapse it to just the Epic bar (a badge shows how many Features are hidden), or the arrow on the section header to collapse or expand them all. Anything missing a date is listed under "Not scheduled yet" instead of being hidden.
 
 The name in the top right is the Jira account the API token belongs to ("Sample user" when running on sample data). There is no separate sign-in yet.

@@ -1,4 +1,4 @@
-import type { ItemType, RoadmapItem, StatusCategory } from "./model.js";
+import type { BoardType, ItemType, RoadmapItem, StatusCategory } from "./model.js";
 
 export interface JiraConfig {
   baseUrl: string;
@@ -81,6 +81,11 @@ export function normalise(
     start: startField ? dateOnly(issue.fields[startField]) : null,
     end: dateOnly(issue.fields.duedate),
     parentKey: type === "feature" ? (issue.fields.parent?.key ?? null) : null,
+    activity: {
+      created: dateOnly(issue.fields.created),
+      statusChanged: dateOnly(issue.fields.statuscategorychangedate),
+      resolved: dateOnly(issue.fields.resolutiondate),
+    },
     url: `${base(c)}/browse/${issue.key}`,
     source: "jira",
   };
@@ -99,7 +104,10 @@ async function search(c: JiraConfig, jql: string, fields: string[]): Promise<Jir
   return out;
 }
 
-const ISSUE_FIELDS = ["summary", "description", "duedate", "status", "issuetype", "parent"];
+const ISSUE_FIELDS = [
+  "summary", "description", "duedate", "status", "issuetype", "parent",
+  "created", "resolutiondate", "statuscategorychangedate",
+];
 
 export async function fetchEpics(c: JiraConfig): Promise<{ items: RoadmapItem[]; warnings: string[] }> {
   const warnings: string[] = [];
@@ -147,6 +155,7 @@ export async function fetchVersions(c: JiraConfig): Promise<RoadmapItem[]> {
         start: dateOnly(v.startDate),
         end: dateOnly(v.releaseDate),
         parentKey: null,
+        activity: null,
         url: `${base(c)}/projects/${encodeURIComponent(c.projectKey)}/versions/${v.id}`,
         source: "jira",
       });
@@ -157,13 +166,29 @@ export async function fetchVersions(c: JiraConfig): Promise<RoadmapItem[]> {
   return out;
 }
 
-/** Sprints from the project's Scrum boards. */
-export async function fetchSprints(c: JiraConfig): Promise<RoadmapItem[]> {
+export interface Board {
+  id: number;
+  type: string;
+}
+
+export async function fetchBoards(c: JiraConfig): Promise<Board[]> {
   const boards = await jiraGet(c, "/rest/agile/1.0/board", {
     projectKeyOrId: c.projectKey,
     maxResults: "50",
   });
-  const scrum: Array<{ id: number }> = (boards.values ?? []).filter((b: any) => b.type === "scrum");
+  return (boards.values ?? []).map((b: any) => ({ id: Number(b.id), type: String(b.type) }));
+}
+
+/** Scrum boards have sprints. A project with boards but none of them Scrum is a Kanban project. */
+export function boardTypeOf(boards: Board[]): BoardType {
+  if (boards.some((b) => b.type === "scrum")) return "scrum";
+  return boards.length > 0 ? "kanban" : "unknown";
+}
+
+/** Sprints from the project's Scrum boards. */
+export async function fetchSprints(c: JiraConfig, knownBoards?: Board[]): Promise<RoadmapItem[]> {
+  const boards = knownBoards ?? (await fetchBoards(c));
+  const scrum = boards.filter((b) => b.type === "scrum");
   const seen = new Map<string, RoadmapItem>();
   for (const board of scrum) {
     let startAt = 0;
@@ -189,6 +214,7 @@ export async function fetchSprints(c: JiraConfig): Promise<RoadmapItem[]> {
           start: dateOnly(s.startDate),
           end: dateOnly(s.endDate),
           parentKey: null,
+          activity: null,
           url: `${base(c)}/jira/software/projects/${encodeURIComponent(c.projectKey)}/boards/${board.id}/backlog`,
           source: "jira",
         });
@@ -201,14 +227,18 @@ export async function fetchSprints(c: JiraConfig): Promise<RoadmapItem[]> {
 }
 
 /** Fetches every item type. One failing type adds a warning instead of failing the whole roadmap. */
-export async function fetchRoadmap(c: JiraConfig): Promise<{ items: RoadmapItem[]; warnings: string[] }> {
+export async function fetchRoadmap(
+  c: JiraConfig
+): Promise<{ items: RoadmapItem[]; warnings: string[]; boardType: BoardType }> {
   const warnings: string[] = [];
+  const boardsP = fetchBoards(c);
   const jobs: Array<[string, ItemType, Promise<RoadmapItem[]>]> = [
     ["Release versions", "version", fetchVersions(c)],
-    ["Sprints", "sprint", fetchSprints(c)],
+    ["Sprints", "sprint", boardsP.then((b) => fetchSprints(c, b))],
     ["Epics", "epic", fetchEpics(c).then((r) => (warnings.push(...r.warnings), r.items))],
     ["Features and stories", "feature", fetchFeatures(c)],
   ];
+  const boardType = await boardsP.then(boardTypeOf, (): BoardType => "unknown");
   const settled = await Promise.allSettled(jobs.map((j) => j[2]));
   const items: RoadmapItem[] = [];
   settled.forEach((r, i) => {
@@ -218,7 +248,7 @@ export async function fetchRoadmap(c: JiraConfig): Promise<{ items: RoadmapItem[
   if (settled.every((r) => r.status === "rejected")) {
     throw new Error("Jira returned an error for every request. Check your URL, email and API token.");
   }
-  return { items, warnings };
+  return { items, warnings, boardType };
 }
 
 export interface Me {

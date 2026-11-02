@@ -53,3 +53,42 @@ export function saveConfig(config: DisplayConfig): void {
     // Storage blocked: the choice lasts for this visit only.
   }
 }
+
+const EST_KEY = "roadmap-estimate-v1";
+
+/** Whether the person has ever changed the layer choices (so we don't override them). */
+export function hasSavedConfig(): boolean {
+  try {
+    return window.localStorage.getItem(KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
+/** null means the person hasn't chosen, so the app decides from the project type. */
+export function loadEstimate(): boolean | null {
+  try {
+    const v = window.localStorage.getItem(EST_KEY);
+    return v === "1" ? true : v === "0" ? false : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveEstimate(on: boolean): void {
+  try {
+    window.localStorage.setItem(EST_KEY, on ? "1" : "0");
+  } catch {
+    // Storage blocked: the choice lasts for this visit only.
+  }
+}
+
+/** Forget every saved choice, so the app picks sensible defaults for the project again. */
+export function clearSavedChoices(): void {
+  try {
+    window.localStorage.removeItem(KEY);
+    window.localStorage.removeItem(EST_KEY);
+  } catch {
+    // Storage blocked: nothing was saved.
+  }
+}

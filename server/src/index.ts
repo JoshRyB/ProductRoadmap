@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
 import { configFromEnv, fetchMe, fetchRoadmap } from "./jira.js";
 import type { Me } from "./jira.js";
-import { sampleItems } from "./sample.js";
+import { sampleItems, sampleKanbanItems } from "./sample.js";
 import type { RoadmapResponse } from "./model.js";
 
 const app = express();
@@ -32,13 +32,15 @@ app.get("/api/roadmap", async (req, res) => {
   try {
     let body: RoadmapResponse;
     if (jira) {
-      const { items, warnings } = await fetchRoadmap(jira);
-      body = { source: "jira", fetchedAt: new Date().toISOString(), items, warnings };
+      const { items, warnings, boardType } = await fetchRoadmap(jira);
+      body = { source: "jira", boardType, fetchedAt: new Date().toISOString(), items, warnings };
     } else {
+      const kanban = process.env.SAMPLE_BOARD === "kanban";
       body = {
         source: "sample",
+        boardType: kanban ? "kanban" : "scrum",
         fetchedAt: new Date().toISOString(),
-        items: sampleItems,
+        items: kanban ? sampleKanbanItems : sampleItems,
         warnings: ["Showing sample data. Add Jira details to server/.env to see your own Epics."],
       };
     }
